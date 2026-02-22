@@ -86,8 +86,8 @@ if [ ! -f "$CONFIG" ]; then
   "post_checkin_offset": "30 minutes",
   "conversation_threshold": 5,
   "calendar_threshold": 6,
-  "feature_conversation": true,
-  "feature_calendar": true,
+  "feature_conversation": false,
+  "feature_calendar": false,
   "default_user_calendar": "",
   "timezone": "UTC",
   "user_email": "",
@@ -280,4 +280,12 @@ fi
 
 echo ""
 echo "========================"
-echo "✅ Setup complete. Run scan_calendar.py to test."
+echo "✅ Setup complete."
+echo ""
+echo "Next steps:"
+echo "  1. Test calendar access:  python3 scripts/scan_calendar.py"
+echo "  2. Enable features:       python3 scripts/config_wizard.py"
+echo "  3. Install background daemon (optional):"
+echo "     bash scripts/install_daemon.sh"
+echo ""
+echo "All features default OFF — enable only what you need in config.json."

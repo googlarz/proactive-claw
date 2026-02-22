@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.11
+version: 1.2.12
 description: >
   🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
 
@@ -45,7 +45,7 @@ side_effects:
   - Outbound HTTPS: Google Calendar API by default. Notion/Telegram/GitHub/clawhub.ai/LLM require explicit feature_* opt-in.
 ---
 
-# 🦞 Proactive Claw v1.2.11
+# 🦞 Proactive Claw v1.2.12
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
@@ -123,8 +123,8 @@ With `max_autonomy_level: confirm` (default), Claude Code **always asks before w
 
 **Step 1 — Review setup scripts:**
 ```bash
-cat ~/.openclaw/workspace/skills/proactive-agent/scripts/setup.sh
-cat ~/.openclaw/workspace/skills/proactive-agent/scripts/install_daemon.sh
+cat ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh
+cat ~/.openclaw/workspace/skills/proactive-claw/scripts/install_daemon.sh
 ```
 Both are plain shell scripts. Confirm they only write to `~/.openclaw/` and create user-level timers (not root services).
 
@@ -164,12 +164,12 @@ python3 action_executor.py --dry-run    # see what would be executed
 **Uninstall daemon:**
 ```bash
 # macOS
-launchctl unload ~/Library/LaunchAgents/ai.openclaw.proactive-agent.plist
-rm ~/Library/LaunchAgents/ai.openclaw.proactive-agent.plist
+launchctl unload ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist
+rm ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist
 
 # Linux
-systemctl --user disable --now openclaw-proactive-agent.timer
-rm ~/.config/systemd/user/openclaw-proactive-agent.*
+systemctl --user disable --now openclaw-proactive-claw.timer
+rm ~/.config/systemd/user/openclaw-proactive-claw.*
 ```
 
 ### 📡 What Data Leaves Your Machine
@@ -183,6 +183,10 @@ rm ~/.config/systemd/user/openclaw-proactive-agent.*
 | Telegram API | Only if enabled | Notification message text | `notification_channels` includes `telegram` |
 | Nextcloud CalDAV | Only if using Nextcloud backend | Calendar read/write via CalDAV | `calendar_backend: nextcloud` |
 | LLM rating API | Only if enabled AND using cloud backend | Outcome notes + event title + sentiment | `llm_rater.enabled` + non-localhost `base_url` |
+| ↳ api.openai.com | Only if `base_url` set to OpenAI | Same as above | `llm_rater.base_url: https://api.openai.com/v1` |
+| ↳ api.groq.com | Only if `base_url` set to Groq | Same as above | `llm_rater.base_url: https://api.groq.com/openai/v1` |
+| ↳ api.together.xyz | Only if `base_url` set to Together | Same as above | `llm_rater.base_url: https://api.together.xyz/v1` |
+| ↳ api.anthropic.com | Only if `base_url` set to Anthropic | Same as above | `llm_rater.base_url: https://api.anthropic.com/v1` |
 
 > 💡 **Local LLM = zero external calls.** With `base_url: http://localhost:11434/v1` (Ollama) or `http://localhost:1234/v1` (LM Studio), nothing leaves your machine.
 
@@ -244,7 +248,7 @@ rm ~/.config/systemd/user/openclaw-proactive-agent.*
 ### Quick Start
 
 ```bash
-bash ~/.openclaw/workspace/skills/proactive-agent/scripts/setup.sh
+bash ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh
 ```
 
 ### Option A — clawhub OAuth ✨ Recommended
@@ -257,7 +261,7 @@ bash ~/.openclaw/workspace/skills/proactive-agent/scripts/setup.sh
 
 1. Go to **https://console.cloud.google.com** → New project → Enable Google Calendar API
 2. Create OAuth 2.0 credentials (Desktop app) → download JSON
-3. `mv ~/Downloads/credentials.json ~/.openclaw/workspace/skills/proactive-agent/credentials.json`
+3. `mv ~/Downloads/credentials.json ~/.openclaw/workspace/skills/proactive-claw/credentials.json`
 4. Run `setup.sh`
 
 ### Option C — Nextcloud CalDAV
@@ -278,7 +282,7 @@ Run `setup.sh` — connects, creates Proactive Claw — Actions calendar, saves 
 ### Install Background Daemon
 
 ```bash
-bash ~/.openclaw/workspace/skills/proactive-agent/scripts/install_daemon.sh
+bash ~/.openclaw/workspace/skills/proactive-claw/scripts/install_daemon.sh
 ```
 
 | Platform | Method | Log |
@@ -290,17 +294,17 @@ bash ~/.openclaw/workspace/skills/proactive-agent/scripts/install_daemon.sh
 
 ```bash
 # Migrate existing outcomes to SQLite
-python3 ~/.openclaw/workspace/skills/proactive-agent/scripts/memory.py --import-outcomes
+python3 ~/.openclaw/workspace/skills/proactive-claw/scripts/memory.py --import-outcomes
 
 # Interactive config wizard (optional but recommended)
-python3 ~/.openclaw/workspace/skills/proactive-agent/scripts/config_wizard.py
+python3 ~/.openclaw/workspace/skills/proactive-claw/scripts/config_wizard.py
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-**File:** `~/.openclaw/workspace/skills/proactive-agent/config.json`
+**File:** `~/.openclaw/workspace/skills/proactive-claw/config.json`
 
 ### Core Settings
 
@@ -417,7 +421,7 @@ Score 0–10 silently after every exchange. Ask once, briefly, at threshold.
 
 **Before asking**, check pending nudges from daemon:
 ```bash
-python3 ~/.openclaw/workspace/skills/proactive-agent/scripts/cross_skill.py --pending-nudges
+python3 ~/.openclaw/workspace/skills/proactive-claw/scripts/cross_skill.py --pending-nudges
 ```
 If nudges exist, surface the most urgent one first instead of a new ask.
 
@@ -1035,7 +1039,7 @@ python3 -c "from action_codec import decode_action_description; print(decode_act
 | `calendar_backend_unavailable` | "Can't reach your calendar. Try again, or continue without calendar features?" |
 | `failed_to_list_calendars` | "Trouble reading calendars. Check connection and that setup.sh ran." |
 | `failed_to_create_events` | "Couldn't create check-in events — [detail]. Try again?" |
-| Setup not run | "Calendar not set up yet. Run: `bash ~/.openclaw/workspace/skills/proactive-agent/scripts/setup.sh`" |
+| Setup not run | "Calendar not set up yet. Run: `bash ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh`" |
 | `python_version_too_old` | "Python 3.8+ required. Install at https://www.python.org/downloads/" |
 | Daemon not installed | "Background notifications are off. Run install_daemon.sh to enable." |
 | Voice backend missing | "No transcription backend found. Run: `pip install openai-whisper`" |
@@ -1131,19 +1135,19 @@ This script does exactly **four things**:
 
 ```bash
 #!/bin/bash
-# install_daemon.sh — Install proactive-agent as a background daemon
+# install_daemon.sh — Install proactive-claw as a background daemon
 # Supports: macOS (launchd) | Linux (systemd user service)
 # Run once after setup.sh
 
 set -e
 
-SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-agent"
+SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
 PYTHON=$(command -v python3)
 PLATFORM=$(uname -s)
 
 if [ "$PLATFORM" = "Darwin" ]; then
   PLIST_DIR="$HOME/Library/LaunchAgents"
-  PLIST="$PLIST_DIR/ai.openclaw.proactive-agent.plist"
+  PLIST="$PLIST_DIR/ai.openclaw.proactive-claw.plist"
   mkdir -p "$PLIST_DIR"
   cat > "$PLIST" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1151,7 +1155,7 @@ if [ "$PLATFORM" = "Darwin" ]; then
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key>         <string>ai.openclaw.proactive-agent</string>
+  <key>Label</key>         <string>ai.openclaw.proactive-claw</string>
   <key>ProgramArguments</key>
   <array>
     <string>$PYTHON</string>
@@ -1176,7 +1180,7 @@ EOF
 elif [ "$PLATFORM" = "Linux" ]; then
   SERVICE_DIR="$HOME/.config/systemd/user"
   mkdir -p "$SERVICE_DIR"
-  cat > "$SERVICE_DIR/openclaw-proactive-agent.service" << EOF
+  cat > "$SERVICE_DIR/openclaw-proactive-claw.service" << EOF
 [Unit]
 Description=OpenClaw Proactive Agent
 After=network.target
@@ -1187,18 +1191,18 @@ StandardOutput=append:$SKILL_DIR/daemon.log
 StandardError=append:$SKILL_DIR/daemon.log
 Environment=HOME=$HOME
 EOF
-  cat > "$SERVICE_DIR/openclaw-proactive-agent.timer" << EOF
+  cat > "$SERVICE_DIR/openclaw-proactive-claw.timer" << EOF
 [Unit]
 Description=Run OpenClaw Proactive Agent every 15 minutes
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=15min
-Unit=openclaw-proactive-agent.service
+Unit=openclaw-proactive-claw.service
 [Install]
 WantedBy=timers.target
 EOF
   systemctl --user daemon-reload
-  systemctl --user enable --now openclaw-proactive-agent.timer
+  systemctl --user enable --now openclaw-proactive-claw.timer
 else
   echo "Platform not supported. Run manually: python3 $SKILL_DIR/scripts/daemon.py --loop"
 fi
