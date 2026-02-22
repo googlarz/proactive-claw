@@ -1,42 +1,31 @@
 ---
 name: proactive-claw
-version: 1.2.6
+version: 1.2.7
 description: >
-  Transform AI agents into governed execution partners that understand your work, monitor your
-  context, and act ahead of you — predictively and under your control. 🧠⚙️🦞
+  🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
 
-  LOCAL-FIRST AUTOMATION: Reads your calendars (read-only) and writes only to its own
-  "Proactive Claw — Actions" calendar. Runs a user-level background daemon (15-min cycles).
-  All decisions logged locally. Safe defaults: most features OFF by default.
+  📅 Reads your calendars + 💬 chat context → plans reminders, prep blocks, buffers & debriefs
+  → writes only to its own "Proactive Claw — Actions" calendar. Local-first, non-root daemon
+  runs every 15 min. All decisions logged locally. Safe defaults — most features OFF.
 
-  Two modes of action:
-  1. Daemon mode (background, PLAN→EXECUTE every 15 min): ingests user events, detects
-     deletions, auto-relinks moved events, plans reminders and prep blocks, fires due actions
-     idempotently. Reads all user calendars (read-only). Writes action calendar + SQLite DB only.
-  2. Conversation mode (optional, requires separate enabled LLM): when chatting with you,
-     Claude Code can optionally call proactive-claw scripts to read your calendar context,
-     propose schedule changes, or log outcomes — only if you enable this per conversation.
-     This is NOT automatic and requires explicit user opt-in each time.
+  ⚙️ Daemon mode: PLAN→EXECUTE→CLEANUP automatically in background.
+  💬 Conversation mode: reads context from chat + calendar, proposes actions, you approve.
 
-  Governance layer: Unified proactivity engine merges energy, notification, policy, and
-  relationship signals. Priority tiers P0–P5, quiet hours, cooldowns, max nudges/day. Global
-  intensity dial (low/balanced/executive) and max autonomy cap (advisory/confirm/autonomous).
-  Explainability mode traces every decision.
+  🔒 Governed by max_autonomy_level (advisory/confirm/autonomous). Priority tiers P0–P5,
+  quiet hours, cooldowns, explainability mode. 35 features. Local SQLite. No telemetry.
 
-  Memory and Learning: Decay-weighted scoring (recent data counts more). SQLite link graph
-  connects user events to planned actions. Policy conflict detection. System health audit.
+  Requires: python3 + Google OAuth credentials OR Nextcloud app password (via setup.sh).
+  Optional (all OFF): Telegram, Notion, GitHub, LLM rater, voice.
 
-  Productization: Config wizard, data export/backup, monthly drift monitoring, simulation
-  mode, soft-cancel policy.
-
-  Requires: python3, Google OAuth credentials (or Nextcloud app password).
-
-  Optional (all OFF by default): gh CLI (feature_cross_skill), NOTION_API_KEY, Telegram
-  bot token (feature_telegram), LLM_RATER_API_KEY (feature_llm_rater), Apple Notes osascript
-  (macOS only, notes_destination=apple-notes), Notion outcome DB (notes_destination=notion).
-
-  SAFE DEFAULTS: feature_cross_skill=false, feature_voice=false, feature_team_awareness=false,
-  feature_llm_rater=false, max_autonomy_level=confirm (not autonomous).
+tags:
+  - calendar
+  - productivity
+  - automation
+  - proactive
+  - daemon
+  - google-calendar
+  - nextcloud
+  - local-first
 
 requires:
   bins:
@@ -44,30 +33,24 @@ requires:
     - bash
   env_vars: []
   credentials:
-    - name: Google OAuth
-      description: "Google OAuth credentials.json — obtained via setup.sh (Google Cloud Console or clawhub OAuth flow)"
-      required: true
-      alternativeWith: nextcloud
-    - name: Nextcloud app password
-      description: "Nextcloud username + app-specific password in config.json"
-      required: true
-      alternativeWith: google
+    - Google OAuth credentials.json (via setup.sh — Google Cloud Console or clawhub OAuth flow)
+    - OR Nextcloud app-specific password (set in config.json)
 
 install:
-  kind: script
-  label: "One-time setup — installs dependencies, creates action calendar, configures daemon"
-  command: "bash scripts/setup.sh"
+  - kind: script
+    label: "One-time setup — installs Python deps, creates action calendar, optionally installs daemon"
+    command: "bash scripts/setup.sh"
 
 side_effects:
   - Installs a user-level background daemon (launchd on macOS, systemd user timer on Linux) via install_daemon.sh. Runs every 15 min. Does NOT run as root. Uninstall instructions in SKILL.md.
   - Writes local files under ~/.openclaw/workspace/skills/proactive-claw/ only. No files written outside this directory.
   - Creates a "Proactive Claw — Actions" calendar in Google/Nextcloud. Never modifies your existing calendars — reads them only.
-  - Maintains a SQLite link graph (proactive_links.db) tracking connections between your events and planned actions.
-  - Outbound HTTPS to Google Calendar API only by default. Notion, Telegram, GitHub, clawhub.ai, LLM rating API are all opt-in via feature_* flags in config.json.
-  - pip installs google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google backend) or caldav, icalendar (Nextcloud backend) during setup.sh.
+  - Maintains a local SQLite link graph (proactive_links.db) connecting your events to planned actions.
+  - Outbound HTTPS to Google Calendar API only by default. Notion, Telegram, GitHub, clawhub.ai, LLM rating API all require explicit opt-in via feature_* flags in config.json.
+  - pip installs google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud) during setup.sh.
 ---
 
-# 🦞 Proactive Claw v1.2.6
+# 🦞 Proactive Claw v1.2.7
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
