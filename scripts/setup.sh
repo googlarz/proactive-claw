@@ -4,7 +4,7 @@
 
 set -e
 
-SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-agent"
+SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
 CONFIG="$SKILL_DIR/config.json"
 CREDS="$SKILL_DIR/credentials.json"
 
@@ -42,7 +42,7 @@ if [ -f "$CONFIG" ]; then
 import json, urllib.request
 from pathlib import Path
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 CREDS_FILE = SKILL_DIR / "credentials.json"
 
@@ -92,7 +92,7 @@ if [ ! -f "$CONFIG" ]; then
   "timezone": "UTC",
   "user_email": "",
   "notes_destination": "local",
-  "notes_path": "~/.openclaw/workspace/skills/proactive-agent/outcomes/",
+  "notes_path": "~/.openclaw/workspace/skills/proactive-claw/outcomes/",
   "scan_days_ahead": 7,
   "scan_cache_ttl_minutes": 30,
   "openclaw_cal_id": "",
@@ -126,7 +126,7 @@ if [ "$BACKEND" = "nextcloud" ]; then
 import json, sys
 from pathlib import Path
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 
 with open(CONFIG_FILE) as f:
@@ -210,7 +210,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CREDS_FILE = SKILL_DIR / "credentials.json"
 TOKEN_FILE = SKILL_DIR / "token.json"
 CONFIG_FILE = SKILL_DIR / "config.json"

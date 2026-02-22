@@ -1,11 +1,11 @@
 #!/bin/bash
-# install_daemon.sh — Install proactive-agent as a background daemon
+# install_daemon.sh — Install proactive-claw as a background daemon
 # Supports: macOS (launchd) | Linux (systemd user service)
 # Run once after setup.sh
 
 set -e
 
-SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-agent"
+SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
 PYTHON=$(command -v python3)
 PLATFORM=$(uname -s)
 
@@ -17,7 +17,7 @@ echo ""
 
 if [ "$PLATFORM" = "Darwin" ]; then
   PLIST_DIR="$HOME/Library/LaunchAgents"
-  PLIST="$PLIST_DIR/ai.openclaw.proactive-agent.plist"
+  PLIST="$PLIST_DIR/ai.openclaw.proactive-claw.plist"
 
   mkdir -p "$PLIST_DIR"
 
@@ -28,7 +28,7 @@ if [ "$PLATFORM" = "Darwin" ]; then
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>ai.openclaw.proactive-agent</string>
+  <string>ai.openclaw.proactive-claw</string>
 
   <key>ProgramArguments</key>
   <array>
@@ -72,12 +72,12 @@ EOF
   echo ""
   echo "To stop:    launchctl unload \"$PLIST\""
   echo "To restart: launchctl unload \"$PLIST\" && launchctl load \"$PLIST\""
-  echo "Status:     launchctl list | grep proactive-agent"
+  echo "Status:     launchctl list | grep proactive-claw"
 
 elif [ "$PLATFORM" = "Linux" ]; then
   SERVICE_DIR="$HOME/.config/systemd/user"
-  SERVICE="$SERVICE_DIR/openclaw-proactive-agent.service"
-  TIMER="$SERVICE_DIR/openclaw-proactive-agent.timer"
+  SERVICE="$SERVICE_DIR/openclaw-proactive-claw.service"
+  TIMER="$SERVICE_DIR/openclaw-proactive-claw.timer"
 
   mkdir -p "$SERVICE_DIR"
 
@@ -101,20 +101,20 @@ Description=Run OpenClaw Proactive Agent every 15 minutes
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=15min
-Unit=openclaw-proactive-agent.service
+Unit=openclaw-proactive-claw.service
 
 [Install]
 WantedBy=timers.target
 EOF
 
   systemctl --user daemon-reload
-  systemctl --user enable --now openclaw-proactive-agent.timer
+  systemctl --user enable --now openclaw-proactive-claw.timer
   echo "✅ Daemon installed and started (systemd user timer)"
   echo "   Runs every 15 minutes"
   echo "   Logs: $SKILL_DIR/daemon.log"
   echo ""
-  echo "To stop:  systemctl --user stop openclaw-proactive-agent.timer"
-  echo "Status:   systemctl --user status openclaw-proactive-agent.timer"
+  echo "To stop:  systemctl --user stop openclaw-proactive-claw.timer"
+  echo "Status:   systemctl --user status openclaw-proactive-claw.timer"
 
 else
   echo "⚠️  Platform '$PLATFORM' not supported for auto-install."

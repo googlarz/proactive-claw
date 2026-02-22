@@ -31,7 +31,7 @@ if sys.version_info < (3, 8):
     }))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 OUTCOMES_DIR = SKILL_DIR / "outcomes"
 

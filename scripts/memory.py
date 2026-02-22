@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-memory.py — SQLite-backed memory layer for proactive-agent.
+memory.py — SQLite-backed memory layer for proactive-claw.
 
 Replaces flat outcomes/ JSON files with a queryable store.
 Supports semantic search via lightweight TF-IDF (no external model needed).
@@ -29,7 +29,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": f"Python 3.8+ required. You have {sys.version}."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 DB_FILE = SKILL_DIR / "memory.db"
 OUTCOMES_DIR = SKILL_DIR / "outcomes"
 

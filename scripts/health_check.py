@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-health_check.py — System health audit for proactive-agent.
+health_check.py — System health audit for proactive-claw.
 
 Single command to check: DB integrity, config validity, daemon running,
 calendar connectivity, feature flag consistency, stale data, disk usage.
@@ -30,7 +30,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": "Python 3.8+ required."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 DB_FILE = SKILL_DIR / "memory.db"
 STATE_FILE = SKILL_DIR / "daemon_state.json"
@@ -113,7 +113,7 @@ def check_daemon_running() -> dict:
     try:
         if platform == "darwin":
             result = subprocess.run(
-                ["launchctl", "list", "ai.openclaw.proactive-agent"],
+                ["launchctl", "list", "ai.openclaw.proactive-claw"],
                 capture_output=True, text=True
             )
             running = result.returncode == 0
@@ -125,7 +125,7 @@ def check_daemon_running() -> dict:
             }
         elif platform.startswith("linux"):
             result = subprocess.run(
-                ["systemctl", "--user", "is-active", "openclaw-proactive-agent.timer"],
+                ["systemctl", "--user", "is-active", "openclaw-proactive-claw.timer"],
                 capture_output=True, text=True
             )
             running = result.stdout.strip() == "active"

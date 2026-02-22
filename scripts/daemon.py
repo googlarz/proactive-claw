@@ -27,7 +27,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": f"Python 3.8+ required. You have {sys.version}."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 STATE_FILE = SKILL_DIR / "daemon_state.json"
 LOG_FILE = SKILL_DIR / "daemon.log"

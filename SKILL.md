@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.7
+version: 1.2.8
 description: >
   🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
 
@@ -50,7 +50,7 @@ side_effects:
   - pip installs google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud) during setup.sh.
 ---
 
-# 🦞 Proactive Claw v1.2.7
+# 🦞 Proactive Claw v1.2.8
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
@@ -351,9 +351,9 @@ python3 ~/.openclaw/workspace/skills/proactive-agent/scripts/config_wizard.py
 
 ### Feature Flags
 
-All local features are **ON** by default. External-facing features are **OFF** by default and must be explicitly enabled.
+All features default **OFF**. Enable only what you need in `config.json`. Run `python3 config_wizard.py` for guided setup.
 
-**Local features (default: `true`):**
+**Local features (default: `false` — no external network calls):**
 
 | Flag | Description |
 |------|-------------|
@@ -380,7 +380,7 @@ All local features are **ON** by default. External-facing features are **OFF** b
 | `feature_config_wizard` | Config wizard |
 | `feature_policy_conflict_detection` | Policy conflict alerts |
 
-**External features (default: `false` — must opt in):**
+**External features (default: `false` — contact external services, must explicitly opt in):**
 
 | Flag | Description |
 |------|-------------|

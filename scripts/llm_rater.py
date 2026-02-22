@@ -34,7 +34,7 @@ Usage:
   python3 llm_rater.py \\
     --event-title "Investor Demo" \\
     --event-datetime "2025-03-15T14:00:00" \\
-    --outcome-file ~/.openclaw/workspace/skills/proactive-agent/outcomes/2025-03-15_investor-demo.json
+    --outcome-file ~/.openclaw/workspace/skills/proactive-claw/outcomes/2025-03-15_investor-demo.json
 
   python3 llm_rater.py \\
     --event-title "Sprint Review" \\
@@ -58,7 +58,7 @@ if sys.version_info < (3, 8):
                       "detail": f"Python 3.8+ required. You have {sys.version}."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 
 RATING_PROMPT = """\

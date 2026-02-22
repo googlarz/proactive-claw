@@ -37,7 +37,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": f"Python 3.8+ required."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 SKILLS_ROOT = Path.home() / ".openclaw/workspace/skills"
 
 

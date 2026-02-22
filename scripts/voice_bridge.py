@@ -2,7 +2,7 @@
 """
 voice_bridge.py — Voice-first interaction via Whisper skill integration.
 
-Transcribes audio input and routes commands to the appropriate proactive-agent
+Transcribes audio input and routes commands to the appropriate proactive-claw
 action. Works standalone or as a bridge called by the whisper skill.
 
 Usage:
@@ -30,7 +30,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": "Python 3.8+ required."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 WHISPER_SKILL_DIR = Path.home() / ".openclaw/workspace/skills/whisper"
 CONFIG_FILE = SKILL_DIR / "config.json"
 sys.path.insert(0, str(SKILL_DIR / "scripts"))
@@ -240,7 +240,7 @@ def record_audio(seconds: int = 10) -> dict:
 
 def route_command(text: str) -> dict:
     """
-    Match a transcribed command to a proactive-agent script and run it.
+    Match a transcribed command to a proactive-claw script and run it.
     Returns the JSON result from the matched script.
     """
     text_clean = text.strip().lower()

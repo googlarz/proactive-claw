@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rules_engine.py — Natural language rule parser for proactive-agent.
+rules_engine.py — Natural language rule parser for proactive-claw.
 
 Converts plain English user instructions into structured rules stored in memory.db.
 Rules are applied by scan_calendar.py to adjust event scores.
@@ -23,7 +23,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": f"Python 3.8+ required."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 sys.path.insert(0, str(SKILL_DIR / "scripts"))
 
 

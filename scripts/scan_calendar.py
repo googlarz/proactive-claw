@@ -26,7 +26,7 @@ if sys.version_info < (3, 8):
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 OUTCOMES_DIR = SKILL_DIR / "outcomes"
 CACHE_FILE = SKILL_DIR / "last_scan.json"

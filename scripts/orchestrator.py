@@ -2,7 +2,7 @@
 """
 orchestrator.py — Multi-agent orchestration for high-stakes events.
 
-Coordinates proactive-agent with other installed OpenClaw skills to run
+Coordinates proactive-claw with other installed OpenClaw skills to run
 a complete pre-event preparation flow autonomously.
 
 Triggered by daemon.py when a high-stakes event is detected.
@@ -24,7 +24,7 @@ if sys.version_info < (3, 8):
     print(json.dumps({"error": "python_version_too_old", "detail": f"Python 3.8+ required."}))
     sys.exit(1)
 
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-agent"
+SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 SKILLS_ROOT = Path.home() / ".openclaw/workspace/skills"
 CONFIG_FILE = SKILL_DIR / "config.json"
 sys.path.insert(0, str(SKILL_DIR / "scripts"))
