@@ -1,23 +1,10 @@
 ---
 name: proactive-claw
-version: 1.2.12
+version: 1.2.13
 description: >
-  🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
-
-  📅 Reads calendars + 💬 chat context → plans reminders, prep blocks, buffers & debriefs →
-  writes only to its own "Proactive Claw — Actions" calendar. Two modes: ⚙️ background daemon
-  (PLAN→EXECUTE→CLEANUP every 15 min, non-root) and 💬 conversation mode (on-demand, you approve).
-
-  🔒 max_autonomy_level: confirm by default. Priority tiers P0–P5, quiet hours, cooldowns,
-  explainability. 35 features. Local SQLite only. No telemetry.
-
-  📦 INSTALL: runs bash scripts/setup.sh — pip installs calendar libs, runs Google OAuth browser
-  flow (credentials.json required) OR reads Nextcloud app password from config.json, creates
-  "Proactive Claw — Actions" calendar, optionally installs user-level launchd/systemd daemon.
-  All files written to ~/.openclaw/workspace/skills/proactive-claw/ only. No root required.
-
-  ⚠️ All features default OFF. Review setup.sh before running.
-  Optional: Telegram, Notion, GitHub, LLM rater — all require explicit opt-in.
+  🦞 Proactive calendar AI: reads calendars + chat → plans reminders, prep blocks, buffers.
+  Requires Google OAuth or Nextcloud password. Install: bash scripts/setup.sh (pip, OAuth).
+  Optional non-root daemon (15 min). Writes to skill-owned calendar only. All features OFF.
 
 emoji: 🦞
 homepage: https://clawhub.ai/skills/proactive-claw
@@ -45,7 +32,7 @@ side_effects:
   - Outbound HTTPS: Google Calendar API by default. Notion/Telegram/GitHub/clawhub.ai/LLM require explicit feature_* opt-in.
 ---
 
-# 🦞 Proactive Claw v1.2.12
+# 🦞 Proactive Claw v1.2.13
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
@@ -55,9 +42,9 @@ side_effects:
 
 ```
 ┌─────────────────────────┐        ┌─────────────────────────┐
-│     YOUR CALENDARS      │        │          CHAT            │
+│     YOUR CALENDARS      │        │      💬 CHAT             │
 │     (N calendars)       │        │   your conversations    │
-│                         │        │   with Claude Code      │
+│                         │        │   with OpenClaw         │
 └────────────┬────────────┘        └────────────┬────────────┘
              │ ▲                                │ ▲
     read     │ │ write                  nudges  │ │ proposals
@@ -65,7 +52,7 @@ side_effects:
              │ │                                │ │
              ▼ │                                ▼ │
 ┌──────────────────────────────────────────────────────────────┐
-│                   Proactive Claw — Actions                    │
+│             🦞 Proactive Claw — Actions                       │
 │              (skill-owned calendar, always visible)          │
 │         Reminders  ·  Prep blocks  ·  Buffers  ·  Debriefs  │
 └──────────────────────────────┬───────────────────────────────┘
@@ -80,7 +67,7 @@ side_effects:
                    └───────────▲───────────┘
                                │ (background, every 15 min)
 ┌─────────────────────────────────────────────────────────────┐
-│                  BACKGROUND DAEMON                           │
+│               ⚙️  BACKGROUND DAEMON                          │
 │  PLAN → EXECUTE → CLEANUP (user-level, non-root)            │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -104,7 +91,7 @@ Every 15 minutes (background, after `install_daemon.sh`):
 
 ### 💬 Chat Mode: On-demand, With Your Approval
 
-When chatting with Claude Code, it can call proactive-claw scripts to:
+When chatting with OpenClaw, it can call proactive-claw scripts to:
 
 | Action | Script | Effect |
 |--------|--------|--------|
@@ -113,7 +100,7 @@ When chatting with Claude Code, it can call proactive-claw scripts to:
 | Log an outcome | `capture_outcome.py` | Only after you confirm the summary |
 | Check policies | `policy_engine.py --evaluate --dry-run` | Suggestions only |
 
-With `max_autonomy_level: confirm` (default), Claude Code **always asks before writing**. With `advisory`, it can only suggest — never execute. With `autonomous`, it acts without asking (not recommended).
+With `max_autonomy_level: confirm` (default), OpenClaw **always asks before writing**. With `advisory`, it can only suggest — never execute. With `autonomous`, it acts without asking (not recommended).
 
 ---
 
@@ -191,6 +178,42 @@ rm ~/.config/systemd/user/openclaw-proactive-claw.*
 > 💡 **Local LLM = zero external calls.** With `base_url: http://localhost:11434/v1` (Ollama) or `http://localhost:1234/v1` (LM Studio), nothing leaves your machine.
 
 **Nothing else.** No analytics, no telemetry, no data sent to the skill author.
+
+---
+
+## 🎬 Sample Scenarios
+
+### Scenario 1 — Board Meeting Prep 📋
+You have a "Q2 Board Review" on Thursday. On Tuesday morning, Proactive Claw:
+- Creates a **prep block** Wednesday 2–4pm: "🦞 Prep: Q2 Board Review"
+- Sends a nudge: *"Board meeting in 48h — want me to pull open action items and draft a talking points agenda?"*
+- After you approve, runs the orchestrator: fetches open GitHub issues, last Notion board notes, relationship brief for attendees
+- On Wednesday evening: *"Prep block starts in 1h — here are 3 likely hard questions based on last quarter's outcomes"*
+
+### Scenario 2 — Rescued Double-Booking 📅
+You accept two meetings at 3pm on Friday. Proactive Claw (P0 safety tier):
+- Immediately surfaces: *"⚠️ Conflict: 'Design Review' and 'Investor Call' both at 3pm Friday"*
+- Offers: *"Move Design Review to 4:30pm (next free slot) or Monday 10am?"*
+- You pick Monday — it moves the event and updates the prep block automatically
+
+### Scenario 3 — Recurring Standup Intelligence 🔄
+You have a daily standup. Proactive Claw learns it's `routine_low_stakes` (recurring, internal, zero action items). It:
+- Suppresses nudges for it — only checks in every 4th occurrence
+- On the 4th standup: *"Haven't logged a standup outcome in 3 weeks — anything worth capturing?"*
+- You say "nope" — snoozes for another 4 sessions automatically
+
+### Scenario 4 — Deleted Meeting Recovery 🗑️
+You cancel "1:1 with Alice" but forget to also cancel the prep block. Proactive Claw:
+- Detects the source event missing after 2 daemon cycles
+- Creates a `confirm_delete` action: *"'1:1 with Alice' seems to have been deleted — cancel linked prep block too? [Yes / No / Don't ask]*"
+- You click Yes — prep block renamed to "🦞 [Canceled] Prep: 1:1 with Alice", deleted after 30 days
+
+### Scenario 5 — Energy-Aware Scheduling ⚡
+You ask OpenClaw: *"Find me 2 hours for deep work this week"*. It:
+- Reads your energy history: Tuesday 9–11am consistently your highest-focus window
+- Checks your calendar: Tuesday 9–11am is free
+- Proposes: *"Block Tuesday 9–11am as focus time? (Your highest-energy window this week)"*
+- You approve — creates "🦞 Focus Block" with buffer 10:50–11am to decompress before your 11am call
 
 ---
 
@@ -478,9 +501,9 @@ python3 daemon.py --simulate --days 7
 
 #### Conversation Mode (Manual, Per-Request)
 
-Claude Code can call scripts during conversations. **This is NOT automatic** — each call requires:
+OpenClaw can call scripts during conversations. **This is NOT automatic** — each call requires:
 1. You enable it explicitly (e.g., "Check my calendar")
-2. Claude Code shows you the proposed action
+2. OpenClaw shows you the proposed action
 3. You approve before execution
 4. `max_autonomy_level: confirm` enforces step 3 (default)
 
