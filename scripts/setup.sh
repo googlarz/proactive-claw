@@ -1,6 +1,12 @@
 #!/bin/bash
-# Proactive Agent — One-time setup
-# Supports: Google Calendar API | Nextcloud CalDAV | clawhub OAuth (mobile-first)
+# Proactive Claw — One-time setup
+# Supports: Google Calendar API | Nextcloud CalDAV
+#
+# SECURITY NOTE: This script does NOT contact any remote server by default.
+# - All packages are installed from PyPI via pip3.
+# - If you have set clawhub_token in config.json, run scripts/setup_clawhub_oauth.sh
+#   separately (opt-in only) to fetch Google credentials via clawhub.ai.
+# - No curl/wget. No eval of remote code. No sudo. No root.
 
 set -e
 
@@ -8,7 +14,7 @@ SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
 CONFIG="$SKILL_DIR/config.json"
 CREDS="$SKILL_DIR/credentials.json"
 
-echo "🦞 Proactive Agent Setup"
+echo "🦞 Proactive Claw Setup"
 echo "========================"
 
 # Check Python 3.8+
@@ -30,57 +36,23 @@ if [ -f "$CONFIG" ]; then
 fi
 echo "📅 Calendar backend: $BACKEND"
 
-# ── clawhub OAuth (mobile-first) ──────────────────────────────────────────────
-# If clawhub_token is set in config, use it to download credentials automatically
-if [ -f "$CONFIG" ]; then
-  CLAWHUB_TOKEN=$(python3 -c "import json; d=json.load(open('$CONFIG')); print(d.get('clawhub_token',''))" 2>/dev/null || echo "")
-  if [ -n "$CLAWHUB_TOKEN" ] && [ "$CLAWHUB_TOKEN" != "None" ] && [ ! -f "$CREDS" ]; then
-    echo "🔑 Detected clawhub_token — downloading Google credentials from clawhub.ai..."
-    echo "   ℹ️  Only credentials.json (OAuth client config) is downloaded — never your token.json."
-    echo "   ℹ️  Review the download at $CREDS after setup if you want to inspect it."
-    python3 - << 'PYEOF'
-import json, urllib.request
-from pathlib import Path
-
-SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
-CONFIG_FILE = SKILL_DIR / "config.json"
-CREDS_FILE = SKILL_DIR / "credentials.json"
-
-with open(CONFIG_FILE) as f:
-    config = json.load(f)
-
-token = config.get("clawhub_token", "")
-if not token:
-    print("❌ No clawhub_token in config.json")
-    exit(1)
-
-try:
-    req = urllib.request.Request(
-        "https://clawhub.ai/api/oauth/google-calendar-credentials",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    )
-    resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
-    creds_data = resp.get("credentials")
-    if not creds_data:
-        print("❌ No credentials returned from clawhub. Connect Google Calendar at https://clawhub.ai/settings/integrations")
-        exit(1)
-    with open(CREDS_FILE, "w") as f:
-        json.dump(creds_data, f)
-    print("✅ Google credentials downloaded via clawhub OAuth")
-except Exception as e:
-    print(f"⚠️  clawhub credential fetch failed: {e}")
-    print("   Fall back: set credentials.json manually (see SKILL.md Setup section)")
-PYEOF
-  fi
-fi
+# ── clawhub OAuth is OPT-IN ONLY ──────────────────────────────────────────────
+# Remote credential provisioning is NOT part of the default flow.
+# If you want to use clawhub.ai to obtain your Google credentials.json,
+# run this separately AFTER reviewing it:
+#   bash scripts/setup_clawhub_oauth.sh
+# This script does NOT contact clawhub.ai. All setup is local.
 
 # Initialize config.json if missing
 if [ ! -f "$CONFIG" ]; then
   echo ""
-  echo "📝 Creating default config.json..."
+  echo "📝 Creating default config.json (safe defaults — all features OFF)..."
   cat > "$CONFIG" << 'EOF'
 {
   "calendar_backend": "google",
+  "max_autonomy_level": "confirm",
+  "daemon_enabled": false,
+  "proactivity_mode": "balanced",
   "pre_checkin_offset_default": "1 day",
   "pre_checkin_offset_same_day": "1 hour",
   "post_checkin_offset": "30 minutes",
@@ -88,6 +60,31 @@ if [ ! -f "$CONFIG" ]; then
   "calendar_threshold": 6,
   "feature_conversation": false,
   "feature_calendar": false,
+  "feature_daemon": false,
+  "feature_memory": false,
+  "feature_conflicts": false,
+  "feature_rules": false,
+  "feature_intelligence_loop": false,
+  "feature_policy_engine": false,
+  "feature_orchestrator": false,
+  "feature_energy": false,
+  "feature_cal_editor": false,
+  "feature_relationship": false,
+  "feature_adaptive_notifications": false,
+  "feature_proactivity_engine": false,
+  "feature_interrupt_controller": false,
+  "feature_explainability": false,
+  "feature_health_check": false,
+  "feature_simulation": false,
+  "feature_export": false,
+  "feature_behaviour_report": false,
+  "feature_config_wizard": false,
+  "feature_policy_conflict_detection": false,
+  "feature_cross_skill": false,
+  "feature_voice": false,
+  "feature_team_awareness": false,
+  "feature_llm_rater": false,
+  "feature_telegram_notifications": false,
   "default_user_calendar": "",
   "timezone": "UTC",
   "user_email": "",
@@ -96,6 +93,14 @@ if [ ! -f "$CONFIG" ]; then
   "scan_days_ahead": 7,
   "scan_cache_ttl_minutes": 30,
   "openclaw_cal_id": "",
+  "action_cleanup_days": 30,
+  "memory_decay_half_life_days": 90,
+  "max_nudges_per_day": 12,
+  "quiet_hours": {
+    "weekdays": "22:00-07:00",
+    "weekends": "21:00-09:00"
+  },
+  "clawhub_token": "",
   "nextcloud": {
     "url": "",
     "username": "",
@@ -104,7 +109,7 @@ if [ ! -f "$CONFIG" ]; then
   }
 }
 EOF
-  echo "✅ config.json created"
+  echo "✅ config.json created with safe defaults (all features OFF, max_autonomy_level: confirm)"
   echo "   → Edit config.json to set your timezone and user_email before continuing."
 fi
 

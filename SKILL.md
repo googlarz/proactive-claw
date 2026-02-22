@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.18
+version: 1.2.19
 description: "🦞 Proactive Claw — your AI calendar co-pilot. Connects to Google Calendar or Nextcloud and plans prep blocks, reminders and buffers for you."
 
 primaryEnv: GOOGLE_CREDENTIALS_JSON
@@ -16,22 +16,23 @@ requires:
 
 install:
   - kind: uv
-    label: "Google Calendar backend (credentials.json required — see Setup section)"
+    label: "Google Calendar — pip3 installs google-api-python-client from PyPI, then OAuth flow via scripts/setup.sh"
     package: google-api-python-client
   - kind: uv
-    label: "Nextcloud CalDAV backend (app password required — see Setup section)"
+    label: "Nextcloud CalDAV — pip3 installs caldav from PyPI, then app password config via scripts/setup.sh"
     package: caldav
 
 side_effects:
   - "CREDENTIALS REQUIRED before first use — Google backend needs credentials.json (OAuth desktop flow, handled by scripts/setup.sh). Nextcloud backend needs an app-specific password entered during scripts/setup.sh. No credentials are uploaded or shared with third parties."
-  - "INSTALL STEPS (transparent, no hidden downloads) — (1) scripts/setup.sh: pip installs PyPI packages, runs OAuth flow, creates action calendar. (2) scripts/install_daemon.sh (optional): writes a user-level launchd/systemd timer only. No sudo. No root. Full source in SKILL.md."
+  - "INSTALL STEPS (transparent, no hidden downloads) — scripts/setup.sh: pip3 installs PyPI packages, runs OAuth flow locally, creates action calendar. scripts/install_daemon.sh (optional, separate command): writes a user-level launchd/systemd timer only. No sudo. No root. Full source in SKILL.md."
+  - "GOOGLE OAUTH SCOPE — requests https://www.googleapis.com/auth/calendar (full calendar scope required to create the Actions calendar). Read-only enforcement for user calendars is by code policy in cal_backend.py. Write calls only target the Actions calendar ID stored in config.json."
   - "Writes only to ~/.openclaw/workspace/skills/proactive-claw/ — credentials.json, token.json, config.json, memory.db, proactive_links.db, daemon.log. Nothing outside this directory."
-  - "Creates one new calendar named 'Proactive Claw — Actions' in your Google/Nextcloud account. All your existing calendars are read-only — never modified."
-  - "Network calls — Google Calendar API only by default. Notion, Telegram, GitHub, and LLM endpoints only if you explicitly enable the matching feature_* flag in config.json."
-  - "pip packages installed from PyPI only — google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud). No private package indexes."
+  - "Creates one new calendar named 'Proactive Claw — Actions'. All your existing calendars are read-only by code policy — write calls are guarded to only target the Actions calendar ID."
+  - "Network — Google Calendar API only by default. Notion, Telegram, GitHub, LLM endpoints only with explicit feature_* opt-in. clawhub.ai only if you run scripts/setup_clawhub_oauth.sh manually (separate opt-in script, not called by setup.sh)."
+  - "pip3 packages from PyPI only — google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud). No private package indexes."
 ---
 
-# 🦞 Proactive Claw v1.2.18
+# 🦞 Proactive Claw v1.2.19
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
@@ -62,22 +63,49 @@ This section documents every credential, install step, and network call so there
 ### Install steps (complete, no hidden steps)
 
 ```
-Step 1 — scripts/setup.sh
-  - Checks python3 ≥ 3.8
-  - pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
-    OR: pip install caldav icalendar   (Nextcloud path)
-  - Runs OAuth flow (opens browser) → saves token.json locally
+Step 1 — scripts/setup.sh  (the only required step)
+  - Checks python3 ≥ 3.8 is installed
+  - pip3 install google-api-python-client google-auth-oauthlib google-auth-httplib2
+    OR: pip3 install caldav icalendar   (Nextcloud path)
+  - All packages installed from PyPI. No private indexes.
+  - Runs Google OAuth flow in your browser → saves token.json locally only
   - Creates "Proactive Claw — Actions" calendar in your account
-  - Writes config.json with safe defaults (all feature_* OFF, max_autonomy_level: confirm)
+  - Writes config.json with safe defaults:
+      max_autonomy_level: confirm
+      daemon_enabled: false
+      all 27 feature_* flags: false
 
-Step 2 — scripts/install_daemon.sh  (OPTIONAL — only if you want background automation)
-  - macOS: writes ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist
+Step 2 — scripts/install_daemon.sh  (OPTIONAL — run separately only if you want background automation)
+  - macOS: writes ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist (user-level only)
   - Linux: writes ~/.config/systemd/user/openclaw-proactive-claw.{service,timer}
-  - NO sudo. NO root. Runs as your user only.
-  - Full source code is included in this SKILL.md (see below).
+  - NO sudo. NO root. Runs as your user only. Logs to skill directory only.
+  - Full source code is reproduced in this SKILL.md (see § install_daemon.sh Source).
+
+Step 3 — scripts/setup_clawhub_oauth.sh  (OPTIONAL, OPT-IN ONLY)
+  - Only run this if you want to use clawhub.ai to provide your credentials.json
+    instead of downloading from Google Cloud Console yourself.
+  - NOT called by setup.sh. Completely separate, must be run explicitly.
+  - What it fetches: Google OAuth client definition (credentials.json) only.
+  - What it does NOT fetch: token.json, calendar data, personal information.
+  - You can inspect credentials.json afterward: it contains only the OAuth client ID/secret.
 ```
 
-**No curl/wget. No downloads from private hosts. No eval of remote code. All packages from PyPI.**
+**No curl/wget. No downloads from private hosts. No eval of remote code. All packages from PyPI. No private package indexes.**
+
+### Google OAuth scope disclosure
+
+```
+Requested scope: https://www.googleapis.com/auth/calendar
+```
+
+This is the full Google Calendar scope — required because the skill needs to **create** the "Proactive Claw — Actions" calendar in your account (calendar creation requires full scope).
+
+**Read-only enforcement for your existing calendars is by code policy:**
+- All write calls in `cal_backend.py` take a `cal_id` parameter
+- The only `cal_id` ever passed for writes is `config["openclaw_cal_id"]` — the Actions calendar ID set during setup
+- Your other calendars are read via `calendarList().list()` and `events().list()` only
+
+If you prefer, you can request a narrower scope by manually editing the `SCOPES` list in `scripts/setup.sh` and `scripts/cal_backend.py` — but calendar creation will then fail and you'll need to create the Actions calendar manually and set its ID in `config.json`.
 
 ---
 
