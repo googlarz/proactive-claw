@@ -1,10 +1,11 @@
 ---
 name: proactive-claw
-version: 1.2.13
+version: 1.2.14
 description: >
   🦞 Proactive calendar AI: reads calendars + chat → plans reminders, prep blocks, buffers.
-  Requires Google OAuth or Nextcloud password. Install: bash scripts/setup.sh (pip, OAuth).
-  Optional non-root daemon (15 min). Writes to skill-owned calendar only. All features OFF.
+  CREDENTIAL: Google OAuth credentials.json OR Nextcloud app password. BINS: python3, bash.
+  INSTALL: bash scripts/setup.sh (pip, OAuth). DAEMON: optional, non-root, 15 min.
+  All features OFF by default. max_autonomy_level=confirm.
 
 emoji: 🦞
 homepage: https://clawhub.ai/skills/proactive-claw
@@ -32,7 +33,7 @@ side_effects:
   - Outbound HTTPS: Google Calendar API by default. Notion/Telegram/GitHub/clawhub.ai/LLM require explicit feature_* opt-in.
 ---
 
-# 🦞 Proactive Claw v1.2.13
+# 🦞 Proactive Claw v1.2.14
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
