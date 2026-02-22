@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.5
+version: 1.2.6
 description: >
   Transform AI agents into governed execution partners that understand your work, monitor your
   context, and act ahead of you — predictively and under your control. 🧠⚙️🦞
@@ -67,7 +67,7 @@ side_effects:
   - pip installs google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google backend) or caldav, icalendar (Nextcloud backend) during setup.sh.
 ---
 
-# 🦞 Proactive Claw v1.2.5
+# 🦞 Proactive Claw v1.2.6
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
