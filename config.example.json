@@ -11,6 +11,7 @@
   "scan_days_ahead": 7,
   "scan_cache_ttl_minutes": 30,
   "daemon_interval_minutes": 15,
+  "daemon_enabled": false,
   "proactivity_mode": "balanced",
   "max_autonomy_level": "confirm",
   "quiet_hours": {

@@ -3,8 +3,8 @@
 # Supports: Google Calendar API | Nextcloud CalDAV
 #
 # SECURITY NOTE: This script does NOT contact any remote server by default.
-# - All packages are installed from PyPI via pip3.
-# - If you have set clawhub_token in config.json, run scripts/setup_clawhub_oauth.sh
+# - All packages are installed from PyPI via uv pip install (pip3 fallback).
+# - If you have set clawhub_token in config.json, run scripts/optional/setup_clawhub_oauth.sh
 #   separately (opt-in only) to fetch Google credentials via clawhub.ai.
 # - No curl/wget. No eval of remote code. No sudo. No root.
 
@@ -40,7 +40,7 @@ echo "📅 Calendar backend: $BACKEND"
 # Remote credential provisioning is NOT part of the default flow.
 # If you want to use clawhub.ai to obtain your Google credentials.json,
 # run this separately AFTER reviewing it:
-#   bash scripts/setup_clawhub_oauth.sh
+#   bash scripts/optional/setup_clawhub_oauth.sh
 # This script does NOT contact clawhub.ai. All setup is local.
 
 # Initialize config.json if missing
