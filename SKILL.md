@@ -1,21 +1,22 @@
 ---
 name: proactive-claw
-version: 1.2.9
+version: 1.2.10
 description: >
   🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
 
-  📅 Reads your calendars + 💬 chat context → plans reminders, prep blocks, buffers & debriefs
-  → writes only to its own "Proactive Claw — Actions" calendar. Local-first, non-root daemon
-  runs every 15 min. All decisions logged locally. Safe defaults — most features OFF.
+  📅 Reads calendars + 💬 chat context → plans reminders, prep blocks, buffers & debriefs →
+  writes only to its own "Proactive Claw — Actions" calendar. Two modes: ⚙️ background daemon
+  (PLAN→EXECUTE→CLEANUP every 15 min, non-root) and 💬 conversation mode (on-demand, you approve).
 
-  ⚙️ Daemon mode: PLAN→EXECUTE→CLEANUP automatically in background.
-  💬 Conversation mode: reads context from chat + calendar, proposes actions, you approve.
+  🔒 max_autonomy_level: confirm by default. Priority tiers P0–P5, quiet hours, cooldowns,
+  explainability. 35 features. Local SQLite only. No telemetry.
 
-  🔒 Governed by max_autonomy_level (advisory/confirm/autonomous). Priority tiers P0–P5,
-  quiet hours, cooldowns, explainability mode. 35 features. Local SQLite. No telemetry.
+  📦 INSTALL: runs bash scripts/setup.sh (pip installs calendar libs, Google OAuth or Nextcloud
+  app password, optionally installs user-level launchd/systemd daemon via install_daemon.sh).
+  All files written to ~/.openclaw/workspace/skills/proactive-claw/ only. No root required.
 
-  Requires: python3 + Google OAuth credentials OR Nextcloud app password (via setup.sh).
-  Optional (all OFF): Telegram, Notion, GitHub, LLM rater, voice.
+  ⚠️ All features default OFF. Enable only what you need. Review setup.sh before running.
+  Optional external integrations (Telegram, Notion, GitHub, LLM rater) require explicit opt-in.
 
 tags:
   - calendar
@@ -26,6 +27,12 @@ tags:
   - google-calendar
   - nextcloud
   - local-first
+  - scheduling
+  - reminders
+  - ai-agent
+  - sqlite
+  - privacy
+  - open-source
 
 requires:
   bins:
@@ -38,19 +45,18 @@ requires:
 
 install:
   - kind: script
-    label: "One-time setup — installs Python deps, creates action calendar, optionally installs daemon"
+    label: "One-time setup — pip installs deps, Google OAuth or Nextcloud auth, creates action calendar, optional user-level daemon"
     command: "bash scripts/setup.sh"
 
 side_effects:
-  - Installs a user-level background daemon (launchd on macOS, systemd user timer on Linux) via install_daemon.sh. Runs every 15 min. Does NOT run as root. Uninstall instructions in SKILL.md.
-  - Writes local files under ~/.openclaw/workspace/skills/proactive-claw/ only. No files written outside this directory.
-  - Creates a "Proactive Claw — Actions" calendar in Google/Nextcloud. Never modifies your existing calendars — reads them only.
-  - Maintains a local SQLite link graph (proactive_links.db) connecting your events to planned actions.
-  - Outbound HTTPS to Google Calendar API only by default. Notion, Telegram, GitHub, clawhub.ai, LLM rating API all require explicit opt-in via feature_* flags in config.json.
-  - pip installs google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud) during setup.sh.
+  - Runs bash scripts/setup.sh: pip installs google-api-python-client/caldav, runs Google OAuth browser flow or reads Nextcloud credentials, creates "Proactive Claw — Actions" calendar.
+  - Optionally installs user-level background daemon (launchd on macOS, systemd user timer on Linux) via install_daemon.sh. Runs every 15 min as your user. NOT root. Uninstall: see SKILL.md.
+  - Writes only to ~/.openclaw/workspace/skills/proactive-claw/ — credentials.json, token.json, config.json, memory.db, proactive_links.db, daemon.log. No files written outside this directory.
+  - Creates and writes to "Proactive Claw — Actions" calendar only. Your existing calendars are read-only — never modified.
+  - Outbound HTTPS: Google Calendar API only by default. Notion/Telegram/GitHub/clawhub.ai/LLM API all require explicit feature_* flag opt-in in config.json.
 ---
 
-# 🦞 Proactive Claw v1.2.9
+# 🦞 Proactive Claw v1.2.10
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
