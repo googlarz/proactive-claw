@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.8
+version: 1.2.9
 description: >
   🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
 
@@ -50,7 +50,7 @@ side_effects:
   - pip installs google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud) during setup.sh.
 ---
 
-# 🦞 Proactive Claw v1.2.8
+# 🦞 Proactive Claw v1.2.9
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
