@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.10
+version: 1.2.11
 description: >
   🦞 Your AI gets ahead of your calendar — not just reactive, but proactive.
 
@@ -11,52 +11,41 @@ description: >
   🔒 max_autonomy_level: confirm by default. Priority tiers P0–P5, quiet hours, cooldowns,
   explainability. 35 features. Local SQLite only. No telemetry.
 
-  📦 INSTALL: runs bash scripts/setup.sh (pip installs calendar libs, Google OAuth or Nextcloud
-  app password, optionally installs user-level launchd/systemd daemon via install_daemon.sh).
+  📦 INSTALL: runs bash scripts/setup.sh — pip installs calendar libs, runs Google OAuth browser
+  flow (credentials.json required) OR reads Nextcloud app password from config.json, creates
+  "Proactive Claw — Actions" calendar, optionally installs user-level launchd/systemd daemon.
   All files written to ~/.openclaw/workspace/skills/proactive-claw/ only. No root required.
 
-  ⚠️ All features default OFF. Enable only what you need. Review setup.sh before running.
-  Optional external integrations (Telegram, Notion, GitHub, LLM rater) require explicit opt-in.
+  ⚠️ All features default OFF. Review setup.sh before running.
+  Optional: Telegram, Notion, GitHub, LLM rater — all require explicit opt-in.
 
-tags:
-  - calendar
-  - productivity
-  - automation
-  - proactive
-  - daemon
-  - google-calendar
-  - nextcloud
-  - local-first
-  - scheduling
-  - reminders
-  - ai-agent
-  - sqlite
-  - privacy
-  - open-source
+emoji: 🦞
+homepage: https://clawhub.ai/skills/proactive-claw
+primaryEnv: GOOGLE_CREDENTIALS_PATH
 
 requires:
   bins:
     - python3
     - bash
-  env_vars: []
-  credentials:
-    - Google OAuth credentials.json (via setup.sh — Google Cloud Console or clawhub OAuth flow)
-    - OR Nextcloud app-specific password (set in config.json)
+  env:
+    - GOOGLE_CREDENTIALS_PATH
+  config:
+    - credentials.json (Google OAuth) OR nextcloud.password (Nextcloud app password)
 
 install:
-  - kind: script
-    label: "One-time setup — pip installs deps, Google OAuth or Nextcloud auth, creates action calendar, optional user-level daemon"
-    command: "bash scripts/setup.sh"
+  - kind: uv
+    label: "One-time setup: pip installs deps, Google OAuth or Nextcloud auth, creates action calendar, optional user-level daemon"
+    package: "bash scripts/setup.sh"
 
 side_effects:
-  - Runs bash scripts/setup.sh: pip installs google-api-python-client/caldav, runs Google OAuth browser flow or reads Nextcloud credentials, creates "Proactive Claw — Actions" calendar.
-  - Optionally installs user-level background daemon (launchd on macOS, systemd user timer on Linux) via install_daemon.sh. Runs every 15 min as your user. NOT root. Uninstall: see SKILL.md.
-  - Writes only to ~/.openclaw/workspace/skills/proactive-claw/ — credentials.json, token.json, config.json, memory.db, proactive_links.db, daemon.log. No files written outside this directory.
-  - Creates and writes to "Proactive Claw — Actions" calendar only. Your existing calendars are read-only — never modified.
-  - Outbound HTTPS: Google Calendar API only by default. Notion/Telegram/GitHub/clawhub.ai/LLM API all require explicit feature_* flag opt-in in config.json.
+  - Runs bash scripts/setup.sh — pip installs google-api-python-client/caldav, Google OAuth browser flow or Nextcloud credentials, creates "Proactive Claw — Actions" calendar.
+  - Optionally installs user-level daemon (launchd macOS / systemd Linux) via install_daemon.sh. Runs every 15 min as your user. NOT root. Uninstall instructions in SKILL.md.
+  - Writes only to ~/.openclaw/workspace/skills/proactive-claw/ — credentials.json, token.json, config.json, memory.db, proactive_links.db, daemon.log.
+  - Writes to "Proactive Claw — Actions" calendar only. All other calendars read-only — never modified.
+  - Outbound HTTPS: Google Calendar API by default. Notion/Telegram/GitHub/clawhub.ai/LLM require explicit feature_* opt-in.
 ---
 
-# 🦞 Proactive Claw v1.2.10
+# 🦞 Proactive Claw v1.2.11
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
