@@ -1,4 +1,12 @@
 #!/bin/bash
+# ============================================================
+# NOT USED BY DEFAULT SETUP — THIS IS AN OPTIONAL HELPER ONLY
+# setup.sh does NOT call this script. Most users don't need it.
+# Use this ONLY if you want clawhub.ai to provide your Google
+# OAuth credentials.json instead of downloading it yourself from
+# Google Cloud Console.
+# ============================================================
+#
 # Proactive Claw — OPT-IN clawhub.ai OAuth credential provisioning
 #
 # WHAT THIS DOES:

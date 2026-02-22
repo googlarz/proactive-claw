@@ -118,7 +118,11 @@ mkdir -p "$SKILL_DIR/outcomes"
 if [ "$BACKEND" = "nextcloud" ]; then
   echo ""
   echo "📦 Installing Nextcloud dependencies..."
-  pip3 install -q --upgrade caldav icalendar
+  if command -v uv &>/dev/null; then
+    uv pip install -q --upgrade caldav icalendar
+  else
+    pip3 install -q --upgrade caldav icalendar
+  fi
   echo "✅ caldav + icalendar installed"
   echo ""
   echo "🔧 Nextcloud setup — editing config.json"
@@ -202,7 +206,11 @@ else
 
   echo ""
   echo "📦 Installing Google Calendar dependencies..."
-  pip3 install -q --upgrade google-api-python-client google-auth-oauthlib google-auth-httplib2
+  if command -v uv &>/dev/null; then
+    uv pip install -q --upgrade google-api-python-client google-auth-oauthlib google-auth-httplib2
+  else
+    pip3 install -q --upgrade google-api-python-client google-auth-oauthlib google-auth-httplib2
+  fi
   echo "✅ Dependencies installed"
 
   echo ""

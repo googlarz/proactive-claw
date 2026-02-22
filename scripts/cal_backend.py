@@ -312,6 +312,23 @@ class CalendarBackend:
             raise ValueError("openclaw_cal_id not set in config.json. Run setup.sh first.")
         return cal_id
 
+    def _assert_write_allowed(self, cal_id: str) -> None:
+        """Hard write-guard: all writes MUST target the Actions calendar only.
+        This enforces the 'read-only for user calendars' promise at runtime,
+        not just by convention. Raises RuntimeError if called with any other calendar ID.
+        """
+        openclaw_id = self.config.get("openclaw_cal_id", "")
+        if not openclaw_id:
+            raise RuntimeError(
+                "openclaw_cal_id not set in config.json — cannot perform writes. Run setup.sh first."
+            )
+        if cal_id != openclaw_id:
+            raise RuntimeError(
+                f"WRITE BLOCKED: attempted to write to calendar '{cal_id}', "
+                f"but only the Actions calendar ('{openclaw_id}') may be written to. "
+                "All user calendars are read-only by policy."
+            )
+
     def list_events(self, cal_id: str, time_min: datetime, time_max: datetime) -> list:
         if self.backend == "nextcloud":
             return nextcloud_list_events(self.config, cal_id, time_min, time_max)
@@ -319,6 +336,7 @@ class CalendarBackend:
 
     def create_event(self, cal_id: str, title: str, start: datetime, end: datetime,
                      description: str = "") -> dict:
+        self._assert_write_allowed(cal_id)
         tz_str = self.config.get("timezone", "UTC")
         if self.backend == "nextcloud":
             return nextcloud_create_event(self.config, cal_id, title, start, end, description)
@@ -332,6 +350,7 @@ class CalendarBackend:
 
     def update_event(self, cal_id: str, event_id: str, patch: dict = None, **kwargs) -> dict:
         """Patch an existing event. Accepts a patch dict and/or keyword args (summary=, description=)."""
+        self._assert_write_allowed(cal_id)
         if patch is None:
             patch = {}
         patch.update(kwargs)  # merge keyword args like summary=, description= into patch
@@ -341,6 +360,7 @@ class CalendarBackend:
 
     def delete_event(self, cal_id: str, event_id: str) -> None:
         """Delete an event by ID."""
+        self._assert_write_allowed(cal_id)
         if self.backend == "nextcloud":
             nextcloud_delete_event(self.config, cal_id, event_id)
         else:

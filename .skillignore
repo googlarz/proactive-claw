@@ -1,10 +1,21 @@
 # Never include these in clawhub uploads or zips
 token.json
 credentials.json
+config.json
 outcomes/
 last_scan.json
 snoozed.json
-config.txt
+pending_nudges.json
+daemon_state.json
+daemon.log
 __pycache__/
 *.pyc
 .DS_Store
+
+# Repository internals — not part of the skill bundle
+.git/
+.github/
+
+# Legacy / scratch files
+config.txt
+*.txt

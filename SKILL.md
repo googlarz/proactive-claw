@@ -1,6 +1,6 @@
 ---
 name: proactive-claw
-version: 1.2.20
+version: 1.2.21
 description: "🦞 Proactive Claw — your AI calendar co-pilot. Connects to Google Calendar or Nextcloud and plans prep blocks, reminders and buffers for you."
 
 primaryEnv: GOOGLE_CREDENTIALS_JSON
@@ -16,23 +16,23 @@ requires:
 
 install:
   - kind: uv
-    label: "Google Calendar — pip3 installs google-api-python-client from PyPI, then OAuth flow via scripts/setup.sh"
+    label: "Google Calendar — uv pip install (or pip3 fallback) google-api-python-client from PyPI; run scripts/setup.sh to complete OAuth flow"
     package: google-api-python-client
   - kind: uv
-    label: "Nextcloud CalDAV — pip3 installs caldav from PyPI, then app password config via scripts/setup.sh"
+    label: "Nextcloud CalDAV — uv pip install (or pip3 fallback) caldav from PyPI; run scripts/setup.sh to enter credentials"
     package: caldav
 
 side_effects:
   - "CREDENTIALS REQUIRED before first use — Google backend needs credentials.json (OAuth desktop flow, handled by scripts/setup.sh). Nextcloud backend needs an app-specific password entered during scripts/setup.sh. No credentials are uploaded or shared with third parties."
-  - "INSTALL STEPS (transparent, no hidden downloads) — scripts/setup.sh: pip3 installs PyPI packages, runs OAuth flow locally, creates action calendar. scripts/install_daemon.sh (optional, separate command): writes a user-level launchd/systemd timer only. No sudo. No root. Full source in SKILL.md."
-  - "GOOGLE OAUTH SCOPE — requests https://www.googleapis.com/auth/calendar (full calendar scope required to create the Actions calendar). Read-only enforcement for user calendars is by code policy in cal_backend.py. Write calls only target the Actions calendar ID stored in config.json."
+  - "INSTALL STEPS (transparent, no hidden downloads) — scripts/setup.sh: uses uv pip install (falls back to pip3) to install PyPI packages, runs OAuth flow locally, creates action calendar. scripts/install_daemon.sh (optional, separate command): writes a user-level launchd/systemd timer only. No sudo. No root. Full source in SKILL.md."
+  - "GOOGLE OAUTH SCOPE — requests https://www.googleapis.com/auth/calendar (full calendar scope required to create the Actions calendar). Read-only enforcement for user calendars is enforced at runtime in cal_backend.py via _assert_write_allowed(): create_event/update_event/delete_event raise RuntimeError if called with any calendar ID other than the Actions calendar ID in config.json. This is a hard runtime guard, not just a convention."
   - "Writes only to ~/.openclaw/workspace/skills/proactive-claw/ — credentials.json, token.json, config.json, memory.db, proactive_links.db, daemon.log. Nothing outside this directory."
   - "Creates one new calendar named 'Proactive Claw — Actions'. All your existing calendars are read-only by code policy — write calls are guarded to only target the Actions calendar ID."
-  - "Network — Google Calendar API only by default. Notion, Telegram, GitHub, LLM endpoints only with explicit feature_* opt-in. clawhub.ai only if you run scripts/setup_clawhub_oauth.sh manually (separate opt-in script, not called by setup.sh)."
+  - "Network — Google Calendar API only by default. Notion, Telegram, GitHub, LLM endpoints only with explicit feature_* opt-in. clawhub.ai only if you run scripts/optional/setup_clawhub_oauth.sh manually (optional helper, not called by setup.sh, not recommended for most users — fetches Google OAuth client definition only, never token.json or calendar data)."
   - "pip3 packages from PyPI only — google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud). No private package indexes."
 ---
 
-# 🦞 Proactive Claw v1.2.20
+# 🦞 Proactive Claw v1.2.21
 
 > Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
 
@@ -81,10 +81,10 @@ Step 2 — scripts/install_daemon.sh  (OPTIONAL — run separately only if you w
   - NO sudo. NO root. Runs as your user only. Logs to skill directory only.
   - Full source code is reproduced in this SKILL.md (see § install_daemon.sh Source).
 
-Step 3 — scripts/setup_clawhub_oauth.sh  (OPTIONAL, OPT-IN ONLY)
-  - Only run this if you want to use clawhub.ai to provide your credentials.json
-    instead of downloading from Google Cloud Console yourself.
-  - NOT called by setup.sh. Completely separate, must be run explicitly.
+Step 3 — scripts/optional/setup_clawhub_oauth.sh  (OPTIONAL, NOT RECOMMENDED FOR MOST USERS)
+  - Only run this if you want clawhub.ai to provide your credentials.json
+    instead of downloading it yourself from Google Cloud Console.
+  - NOT called by setup.sh. Located in scripts/optional/. Must be run explicitly.
   - What it fetches: Google OAuth client definition (credentials.json) only.
   - What it does NOT fetch: token.json, calendar data, personal information.
   - You can inspect credentials.json afterward: it contains only the OAuth client ID/secret.
@@ -345,18 +345,19 @@ You ask OpenClaw: *"Find me 2 hours for deep work this week"*. It:
 bash ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh
 ```
 
-### Option A — clawhub OAuth ✨ Recommended
-
-1. Go to **https://clawhub.ai/settings/integrations** → Connect Google Calendar → copy your token
-2. In `config.json` set `"clawhub_token": "your-token-here"`
-3. Run `setup.sh` — credentials download automatically, no Google Cloud Console needed
-
-### Option B — Manual Google Credentials
+### Option A — Manual Google Credentials (Recommended)
 
 1. Go to **https://console.cloud.google.com** → New project → Enable Google Calendar API
 2. Create OAuth 2.0 credentials (Desktop app) → download JSON
 3. `mv ~/Downloads/credentials.json ~/.openclaw/workspace/skills/proactive-claw/credentials.json`
 4. Run `setup.sh`
+
+### Option B — clawhub OAuth (Optional helper, not recommended for most users)
+
+1. Go to **https://clawhub.ai/settings/integrations** → Connect Google Calendar → copy your token
+2. In `config.json` set `"clawhub_token": "your-token-here"`
+3. Run `bash scripts/optional/setup_clawhub_oauth.sh` — fetches OAuth client definition only (not your token or calendar data)
+4. Run `setup.sh` to complete the rest of setup
 
 ### Option C — Nextcloud CalDAV
 
@@ -1168,8 +1169,9 @@ All v1.2.0 scripts are **local-only** unless noted.
 | `team_awareness.py` | Google/Nextcloud API (reads shared calendars) | — | Opt-in team features |
 | `llm_rater.py` | LLM API (local Ollama default, cloud opt-in) | — | Rating endpoint |
 | `cal_backend.py` | Google/Nextcloud API | — | Calendar abstraction layer |
-| `setup.sh` | clawhub.ai (opt-in), Google OAuth, Nextcloud | `pip3 install` | One-time setup |
+| `setup.sh` | Google OAuth, Nextcloud | `uv pip install` (pip3 fallback) | One-time setup; does NOT contact clawhub.ai |
 | `install_daemon.sh` | — | `launchctl`/`systemctl` | One-time daemon install |
+| `optional/setup_clawhub_oauth.sh` | clawhub.ai (opt-in only) | — | Optional: fetch OAuth client from clawhub; not called by setup.sh |
 | **`decay.py`** 🆕 | — | — | Pure math library |
 | **`proactivity_engine.py`** 🆕 | — | — | Local SQLite scoring |
 | **`interrupt_controller.py`** 🆕 | — | — | Local SQLite nudge filter |
@@ -1310,11 +1312,12 @@ fi
 |------|-------------|----------|
 | 1 | Checks Python 3.8+ is installed | No |
 | 2 | Reads `calendar_backend` from config.json (defaults to `google`) | No |
-| 3 | **If** `clawhub_token` set AND `credentials.json` missing: fetches OAuth config from `clawhub.ai/api/oauth/google-calendar-credentials` | One HTTPS GET to clawhub.ai only, **optional** |
-| 4 | Creates default `config.json` if it doesn't exist | No |
-| 5 | Creates `outcomes/` directory | No |
-| Nextcloud path | `pip3 install caldav icalendar`; connects to Nextcloud; creates action calendar if missing | HTTPS to **your own Nextcloud only** |
-| Google path | `pip3 install google-api-python-client google-auth-oauthlib google-auth-httplib2`; OAuth flow; creates action calendar | HTTPS to **Google OAuth + Calendar API only** |
+| 3 | Creates default `config.json` if it doesn't exist (all features OFF, daemon_enabled: false) | No |
+| 4 | Creates `outcomes/` directory | No |
+| Nextcloud path | `uv pip install caldav icalendar` (pip3 fallback); connects to Nextcloud; creates action calendar if missing | HTTPS to **your own Nextcloud only** |
+| Google path | `uv pip install google-api-python-client google-auth-oauthlib google-auth-httplib2` (pip3 fallback); OAuth flow; creates action calendar | HTTPS to **Google OAuth + Calendar API only** |
+
+**clawhub.ai is NOT contacted by setup.sh.** Use `scripts/optional/setup_clawhub_oauth.sh` separately only if desired.
 
 **No curl/wget. No arbitrary downloads. No root. No system file modifications. No data sent to skill author.**
 

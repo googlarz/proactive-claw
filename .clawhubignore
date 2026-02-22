@@ -3,6 +3,7 @@ config.json
 token.json
 credentials.json
 memory.db
+proactive_links.db
 last_scan.json
 snoozed.json
 pending_nudges.json
@@ -12,3 +13,11 @@ outcomes/
 *.pyc
 __pycache__/
 .DS_Store
+
+# Repository internals — not part of the skill bundle
+.git/
+.github/
+
+# Legacy / scratch files
+config.txt
+*.txt
