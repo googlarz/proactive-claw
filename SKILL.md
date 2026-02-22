@@ -41,18 +41,26 @@ description: >
 requires:
   bins:
     - python3
+    - bash
   env_vars: []
   credentials:
-    - Google OAuth credentials (via setup.sh) OR Nextcloud app password (via setup.sh)
+    - name: Google OAuth
+      description: "Google OAuth credentials.json — obtained via setup.sh (Google Cloud Console or clawhub OAuth flow)"
+      required: true
+      alternativeWith: nextcloud
+    - name: Nextcloud app password
+      description: "Nextcloud username + app-specific password in config.json"
+      required: true
+      alternativeWith: google
 
 install:
-  - kind: script
-    label: "One-time setup — creates calendar, installs dependencies, configures daemon"
-    command: "bash scripts/setup.sh"
+  kind: script
+  label: "One-time setup — installs dependencies, creates action calendar, configures daemon"
+  command: "bash scripts/setup.sh"
 
 side_effects:
   - Installs a user-level background daemon (launchd on macOS, systemd user timer on Linux) via install_daemon.sh. Runs every 15 min. Does NOT run as root. Uninstall instructions in SKILL.md.
-  - Writes local files under ~/.openclaw/workspace/skills/proactive-agent/ only. No files written outside this directory.
+  - Writes local files under ~/.openclaw/workspace/skills/proactive-claw/ only. No files written outside this directory.
   - Creates a "Proactive Claw — Actions" calendar in Google/Nextcloud. Never modifies your existing calendars — reads them only.
   - Maintains a SQLite link graph (proactive_links.db) tracking connections between your events and planned actions.
   - Outbound HTTPS to Google Calendar API only by default. Notion, Telegram, GitHub, clawhub.ai, LLM rating API are all opt-in via feature_* flags in config.json.
