@@ -1,0 +1,14 @@
+# Runtime files — never publish these
+config.json
+token.json
+credentials.json
+memory.db
+last_scan.json
+snoozed.json
+pending_nudges.json
+daemon_state.json
+daemon.log
+outcomes/
+*.pyc
+__pycache__/
+.DS_Store

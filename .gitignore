@@ -1,0 +1,25 @@
+# User credentials — never commit
+config.json
+credentials.json
+token.json
+
+# User data
+memory.db
+proactive_links.db
+outcomes/
+daemon.log
+cleanup_state.json
+pending_nudges.json
+state.json
+scan_cache.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# macOS
+.DS_Store

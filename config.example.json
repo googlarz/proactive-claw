@@ -1,0 +1,92 @@
+{
+  "_comment": "Copy this to config.json and edit. Safe-off defaults — enable only what you need.",
+  "calendar_backend": "google",
+  "timezone": "UTC",
+  "user_email": "",
+  "pre_checkin_offset_default": "1 day",
+  "pre_checkin_offset_same_day": "1 hour",
+  "post_checkin_offset": "30 minutes",
+  "conversation_threshold": 5,
+  "calendar_threshold": 6,
+  "scan_days_ahead": 7,
+  "scan_cache_ttl_minutes": 30,
+  "daemon_interval_minutes": 15,
+  "proactivity_mode": "balanced",
+  "max_autonomy_level": "confirm",
+  "quiet_hours": {
+    "weekdays": "22:00-07:00",
+    "weekends": "21:00-09:00"
+  },
+  "memory_decay_half_life_days": 90,
+  "max_nudges_per_day": 12,
+  "nudge_cooldown_minutes": 30,
+  "openclaw_cal_id": "",
+  "default_user_calendar": "",
+  "watched_calendars": [],
+  "ignored_calendars": [],
+  "action_cleanup_days": 30,
+  "notes_destination": "local",
+  "notes_path": "~/.openclaw/workspace/skills/proactive-agent/outcomes/",
+
+  "_features_comment": "All external-facing features are OFF by default. Enable only what you need.",
+  "feature_conversation": true,
+  "feature_calendar": true,
+  "feature_daemon": true,
+  "feature_memory": true,
+  "feature_conflicts": true,
+  "feature_rules": true,
+  "feature_intelligence_loop": true,
+  "feature_policy_engine": true,
+  "feature_orchestrator": true,
+  "feature_energy": true,
+  "feature_cal_editor": true,
+  "feature_relationship": true,
+  "feature_adaptive_notifications": true,
+  "feature_proactivity_engine": true,
+  "feature_interrupt_controller": true,
+  "feature_explainability": true,
+  "feature_health_check": true,
+  "feature_simulation": true,
+  "feature_export": true,
+  "feature_behaviour_report": true,
+  "feature_config_wizard": true,
+  "feature_policy_conflict_detection": true,
+
+  "_external_features_comment": "These contact external services — all MUST be explicitly enabled.",
+  "feature_cross_skill": false,
+  "feature_voice": false,
+  "feature_team_awareness": false,
+  "feature_llm_rater": false,
+  "feature_telegram_notifications": false,
+
+  "_notification_comment": "Notification channels. 'openclaw' and 'system' are local-only.",
+  "notification_channels": ["openclaw", "system"],
+
+  "_telegram_comment": "Only used if 'telegram' added to notification_channels.",
+  "telegram": {
+    "bot_token": "",
+    "chat_id": ""
+  },
+
+  "_clawhub_comment": "Optional: set clawhub_token to auto-download credentials.json via clawhub OAuth during setup.",
+  "clawhub_token": "",
+
+  "_nextcloud_comment": "Only used if calendar_backend = 'nextcloud'. Use an app-specific password.",
+  "nextcloud": {
+    "url": "",
+    "username": "",
+    "password": "",
+    "openclaw_calendar_url": ""
+  },
+
+  "_llm_rater_comment": "Defaults to local Ollama — no API key needed, no data leaves machine.",
+  "llm_rater": {
+    "enabled": false,
+    "base_url": "http://localhost:11434/v1",
+    "model": "qwen2.5:3b",
+    "api_key_env": "",
+    "timeout": 30,
+    "max_tokens": 256,
+    "temperature": 0.1
+  }
+}
