@@ -38,7 +38,7 @@ DEFAULT_CONFIG = {
     "scan_cache_ttl_minutes": 30,
     "daemon_interval_minutes": 15,
     "proactivity_mode": "balanced",
-    "max_autonomy_level": "autonomous",
+    "max_autonomy_level": "confirm",
     "quiet_hours": {"weekdays": "22:00-07:00", "weekends": "21:00-09:00"},
     "memory_decay_half_life_days": 90,
     "max_nudges_per_day": 12,
@@ -236,18 +236,53 @@ def validate_config() -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--defaults", action="store_true",
-                        help="Generate config with all defaults (non-interactive)")
-    parser.add_argument("--validate", action="store_true",
-                        help="Validate existing config.json")
+    parser.add_argument(
+        "--defaults",
+        action="store_true",
+        help="Generate config with safe defaults (non-interactive).",
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate existing config.json",
+    )
+    parser.add_argument(
+        "--autonomy",
+        choices=["advisory", "confirm", "autonomous"],
+        default="confirm",
+        help="Set max_autonomy_level when using --defaults (default: confirm).",
+    )
+    parser.add_argument(
+        "--i-accept-risk",
+        action="store_true",
+        help="Required to set --autonomy autonomous (unsafe).",
+    )
+
     args = parser.parse_args()
 
     if args.defaults:
+        cfg = dict(DEFAULT_CONFIG)
+        # Safe by default: unattended config generation must never silently enable autonomy.
+        if args.autonomy == "autonomous" and not args.i_accept_risk:
+            raise SystemExit(
+                "Refusing to set max_autonomy_level=autonomous without --i-accept-risk."
+            )
+        cfg["max_autonomy_level"] = args.autonomy
+
         SKILL_DIR.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2)
-        print(json.dumps({"status": "ok", "path": str(CONFIG_FILE),
-                          "message": "Default config.json written."}))
+            json.dump(cfg, f, indent=2)
+
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "path": str(CONFIG_FILE),
+                    "message": "Default config.json written.",
+                    "max_autonomy_level": cfg.get("max_autonomy_level"),
+                }
+            )
+        )
 
     elif args.validate:
         print(json.dumps(validate_config(), indent=2))
@@ -257,7 +292,8 @@ def main():
         SKILL_DIR.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
-        print(f"\n📝 Config written to {CONFIG_FILE}")
+        print(f"
+📝 Config written to {CONFIG_FILE}")
         print("   Next: run setup.sh to connect your calendar.")
 
 

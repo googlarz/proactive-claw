@@ -1,1341 +1,322 @@
 ---
-name: proactive-claw
-version: 1.2.23
-description: "🦞 Proactive Claw — your AI calendar co-pilot. Connects to Google Calendar or Nextcloud and plans prep blocks, reminders and buffers for you."
+name: Proactive Claw
+description: >
+  🦞 The most powerful proactive engine for OpenClaw. Your personal assistant that learns from you and helps you be more productive.
 
-primaryEnv: GOOGLE_CREDENTIALS_JSON
+version: 1.2.32
 
-requires:
-  bins:
-    - python3
-  env:
-    - GOOGLE_CREDENTIALS_JSON
-  config:
-    - credentials.json
-    - config.json
-
-install:
-  - kind: uv
-    label: "Google Calendar — uv pip install (or pip3 fallback) google-api-python-client from PyPI; run scripts/setup.sh to complete OAuth flow"
-    package: google-api-python-client
-  - kind: uv
-    label: "Nextcloud CalDAV — uv pip install (or pip3 fallback) caldav from PyPI; run scripts/setup.sh to enter credentials"
-    package: caldav
-
-side_effects:
-  - "CREDENTIALS REQUIRED before first use — Google backend needs credentials.json (OAuth desktop flow, handled by scripts/setup.sh). Nextcloud backend needs an app-specific password entered during scripts/setup.sh. No credentials are uploaded or shared with third parties."
-  - "INSTALL STEPS (transparent, no hidden downloads) — scripts/setup.sh: uses uv pip install (falls back to pip3) to install PyPI packages, runs OAuth flow locally, creates action calendar. scripts/install_daemon.sh (optional, separate command): writes a user-level launchd/systemd timer only. No sudo. No root. Full source in SKILL.md."
-  - "GOOGLE OAUTH SCOPE — requests https://www.googleapis.com/auth/calendar (full calendar scope required to create the Actions calendar). Read-only enforcement for user calendars is enforced at runtime in cal_backend.py via _assert_write_allowed(): create_event/update_event/delete_event raise RuntimeError if called with any calendar ID other than the Actions calendar ID in config.json. This is a hard runtime guard, not just a convention."
-  - "Writes only to ~/.openclaw/workspace/skills/proactive-claw/ — credentials.json, token.json, config.json, memory.db, proactive_links.db, daemon.log. Nothing outside this directory."
-  - "Creates one new calendar named 'Proactive Claw — Actions'. All your existing calendars are read-only by code policy — write calls are guarded to only target the Actions calendar ID."
-  - "Network — Google Calendar API only by default. Notion, Telegram, GitHub, LLM endpoints only with explicit feature_* opt-in. clawhub.ai only if you run scripts/optional/setup_clawhub_oauth.sh manually (optional helper, not called by setup.sh, not recommended for most users — fetches Google OAuth client definition only, never token.json or calendar data)."
-  - "pip3 packages from PyPI only — google-api-python-client, google-auth-oauthlib, google-auth-httplib2 (Google) or caldav, icalendar (Nextcloud). No private package indexes."
+metadata:
+  openclaw:
+    requires:
+      bins: [python3]
+      config: [credentials.json, config.json]
+    install:
+      - kind: shell
+        label: "Run scripts/setup.sh to install dependencies and configure Google OAuth or Nextcloud CalDAV"
 ---
 
-# 🦞 Proactive Claw v1.2.23
+# 🦞 Proactive Claw
 
-> Transform AI agents into governed execution partners that understand your work, monitor your context, and act ahead of you — predictively and under your control.
+Proactive Claw is a **proactive execution engine** that **collaborates with you** and **learns from you**.
+
+It helps you be more productive by making smart suggestions at the right moment — and (by default) only applying what you approve.
+
+**Everything can run locally.**
 
 ---
 
-## ⚠️ Credentials & Install — Full Transparency
+## Safety in one glance ✅
 
-This section documents every credential, install step, and network call so there are no surprises.
-
-### Required credentials (one of two, depending on calendar backend)
-
-| Backend | What you need | Where it's stored | Who sees it |
-|---------|--------------|-------------------|-------------|
-| Google Calendar (default) | `credentials.json` — Google OAuth desktop app credentials | `~/.openclaw/workspace/skills/proactive-claw/credentials.json` | **You only.** Never uploaded. |
-| Nextcloud CalDAV | App-specific password (NOT your account password) | Entered once in `scripts/setup.sh`, stored in `config.json` locally | **You only.** Never uploaded. |
-
-### Optional credentials (all empty by default)
-
-| Credential | Feature flag | What it enables |
-|-----------|-------------|-----------------|
-| `clawhub_token` | (config field) | Lets clawhub.ai provide your `credentials.json` via OAuth — alternative to Google Cloud Console |
-| `telegram.bot_token` | `feature_telegram_notifications: true` | Sends nudges to your Telegram chat |
-| LLM API key (env var) | `feature_llm_rater: true` + cloud `base_url` | Rates meeting quality via cloud LLM. Default is local Ollama — no key, no data sent. |
-| `NOTION_API_KEY` (env var) | `feature_cross_skill: true` | Reads Notion pages matching event titles (read-only) |
-
-**All optional fields default to empty string. Skill works with just credentials.json (or Nextcloud password) + python3.**
-
-### Install steps (complete, no hidden steps)
-
-```
-Step 1 — scripts/setup.sh  (the only required step)
-  - Checks python3 ≥ 3.8 is installed
-  - pip3 install google-api-python-client google-auth-oauthlib google-auth-httplib2
-    OR: pip3 install caldav icalendar   (Nextcloud path)
-  - All packages installed from PyPI. No private indexes.
-  - Runs Google OAuth flow in your browser → saves token.json locally only
-  - Creates "Proactive Claw — Actions" calendar in your account
-  - Writes config.json with safe defaults:
-      max_autonomy_level: confirm
-      daemon_enabled: false
-      all 27 feature_* flags: false
-
-Step 2 — scripts/install_daemon.sh  (OPTIONAL — run separately only if you want background automation)
-  - macOS: writes ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist (user-level only)
-  - Linux: writes ~/.config/systemd/user/openclaw-proactive-claw.{service,timer}
-  - NO sudo. NO root. Runs as your user only. Logs to skill directory only.
-  - Full source code is reproduced in this SKILL.md (see § install_daemon.sh Source).
-
-Step 3 — scripts/optional/setup_clawhub_oauth.sh  (OPTIONAL, NOT RECOMMENDED FOR MOST USERS)
-  - Only run this if you want clawhub.ai to provide your credentials.json
-    instead of downloading it yourself from Google Cloud Console.
-  - NOT called by setup.sh. Located in scripts/optional/. Must be run explicitly.
-  - What it fetches: Google OAuth client definition (credentials.json) only.
-  - What it does NOT fetch: token.json, calendar data, personal information.
-  - You can inspect credentials.json afterward: it contains only the OAuth client ID/secret.
-```
-
-**No curl/wget. No downloads from private hosts. No eval of remote code. All packages from PyPI. No private package indexes.**
-
-### Google OAuth scope disclosure
-
-```
-Requested scope: https://www.googleapis.com/auth/calendar
-```
-
-This is the full Google Calendar scope — required because the skill needs to **create** the "Proactive Claw — Actions" calendar in your account (calendar creation requires full scope).
-
-**Read-only enforcement for your existing calendars is by code policy:**
-- All write calls in `cal_backend.py` take a `cal_id` parameter
-- The only `cal_id` ever passed for writes is `config["openclaw_cal_id"]` — the Actions calendar ID set during setup
-- Your other calendars are read via `calendarList().list()` and `events().list()` only
-
-If you prefer, you can request a narrower scope by manually editing the `SCOPES` list in `scripts/setup.sh` and `scripts/cal_backend.py` — but calendar creation will then fail and you'll need to create the Actions calendar manually and set its ID in `config.json`.
+✅ Asks before applying changes (default)  
+✅ Writes only what you approve (no surprise calendar edits)  
+✅ Optional daemon (off by default)  
+✅ Everything can run locally (small/local scoring model recommended)  
+✅ Local state folder is transparent and deletable  
 
 ---
 
-## 🏗️ Architecture
+## Why people install it (what you feel in week 1)
 
-```
-┌─────────────────────────┐        ┌─────────────────────────┐
-│     YOUR CALENDARS      │        │      💬 CHAT             │
-│     (N calendars)       │        │   your conversations    │
-│                         │        │   with OpenClaw         │
-└────────────┬────────────┘        └────────────┬────────────┘
-             │ ▲                                │ ▲
-    read     │ │ write                  nudges  │ │ proposals
-    events   │ │ action events        & context │ │ & approvals
-             │ │                                │ │
-             ▼ │                                ▼ │
-┌──────────────────────────────────────────────────────────────┐
-│             🦞 Proactive Claw — Actions                       │
-│              (skill-owned calendar, always visible)          │
-│         Reminders  ·  Prep blocks  ·  Buffers  ·  Debriefs  │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                   ┌───────────▼───────────┐
-                   │     Link Graph DB      │
-                   │     (SQLite)           │
-                   │  user_events           │
-                   │  action_events         │
-                   │  links · suppression   │
-                   │  sent_actions          │
-                   └───────────▲───────────┘
-                               │ (background, every 15 min)
-┌─────────────────────────────────────────────────────────────┐
-│               ⚙️  BACKGROUND DAEMON                          │
-│  PLAN → EXECUTE → CLEANUP (user-level, non-root)            │
-└─────────────────────────────────────────────────────────────┘
-```
+- You show up prepared more often.
+- Your calendar becomes more realistic (buffers appear where they matter).
+- Deep work blocks stop getting shredded by “just one quick meeting.”
+- Follow-ups stop slipping.
+- Proactive Claw learns your style quickly:
+  prep durations, preferred times, what you reject, what you always accept.
 
-**Two independent modes — both governed by `max_autonomy_level`:**
-
-| Mode | Trigger | Autonomy |
-|------|---------|----------|
-| 💬 **Chat** | You, explicitly per conversation | Capped by `max_autonomy_level` |
-| ⚙️ **Daemon** | Background timer, every 15 min | Capped by `max_autonomy_level` |
-
-**Your calendars** are read-only in both modes — never modified. All writes go to the **"Proactive Claw — Actions"** calendar only. Events are linked via a SQLite graph so actions stay in sync when source events move or are deleted.
-
-### ⚙️ Daemon Cycle: PLAN → EXECUTE → CLEANUP
-
-Every 15 minutes (background, after `install_daemon.sh`):
-
-1. **PLAN** — Ingest user events, detect deletions, auto-relink moved events, plan reminder/prep/buffer/debrief actions
-2. **EXECUTE** — Fire due actions idempotently (check `sent_actions` table before sending)
-3. **CLEANUP** — Once daily: rename paused/canceled events, delete old canceled entries
-
-### 💬 Chat Mode: On-demand, With Your Approval
-
-When chatting with OpenClaw, it can call proactive-claw scripts to:
-
-| Action | Script | Effect |
-|--------|--------|--------|
-| Read your schedule | `scan_calendar.py` | Shows result — no writes |
-| Propose a change | `cal_editor.py --dry-run` | You approve before anything changes |
-| Log an outcome | `capture_outcome.py` | Only after you confirm the summary |
-| Check policies | `policy_engine.py --evaluate --dry-run` | Suggestions only |
-
-With `max_autonomy_level: confirm` (default), OpenClaw **always asks before writing**. With `advisory`, it can only suggest — never execute. With `autonomous`, it acts without asking (not recommended).
+In short: it becomes your personal assistant.
 
 ---
 
-## 🔒 Security & Privacy
+## Graph A — the simple loop (how it works at a glance)
 
-### ⚠️ CRITICAL — Read Before Installing
+```text
++--------------------------+        +--------------------------+
+| Calendar                 |        | Chat                     |
+| Google Calendar/Nextcloud|        | (your control loop)      |
++------------+-------------+        +------------+-------------+
+             |  events <-> suggestions           | prompts <-> decisions
+             |                                   |
+             +-------------------+---------------+
+                                 |
+                                 v
+                  +--------------------------------------+
+                  |            Proactive Claw             |
+                  |  - notices what's coming              |
+                  |  - prioritizes what matters           |
+                  |  - suggests prep / buffers / followup |
+                  |  - learns from your feedback          |
+                  |  - applies only what you approve      |
+                  +--------------------------------------+
+```
 
-**Step 1 — Review setup scripts:**
+**Key idea:** Proactive Claw is proactive, but you remain the decision-maker (by default).
+
+---
+
+## Quick start (2 minutes)
+
+1) Install + bootstrap:
 ```bash
-cat ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh
-cat ~/.openclaw/workspace/skills/proactive-claw/scripts/install_daemon.sh
+bash scripts/setup.sh
 ```
-Both are plain shell scripts. Confirm they only write to `~/.openclaw/` and create user-level timers (not root services).
 
-**Step 2 — Start with safe defaults:**
-- Run `python3 config_wizard.py` for guided setup — do NOT copy `config.example.json` directly
-- Ensure `max_autonomy_level: "confirm"` (not `autonomous`)
-- All `feature_*` default to `false` for external services — only enable what you need
-
-**Step 3 — For credentials:**
-- **Google**: use standard OAuth desktop flow (`setup.sh` handles this)
-- **Nextcloud**: generate an app-specific password — never your account password
-- **clawhub_token**: optional; only use if you trust clawhub.ai
-- **External APIs** (Telegram, Notion, GitHub, LLM): only provide tokens when enabling the feature
-
-**Step 4 — Test in dry-run mode first:**
+2) Run a safe preview:
 ```bash
-python3 daemon.py --simulate --days 3   # safe preview, no writes
-python3 action_planner.py --dry-run     # see what would be planned
-python3 action_executor.py --dry-run    # see what would be executed
+python3 scripts/daemon.py --simulate
 ```
 
-### 🛡️ Security Guarantees
-
-| Guarantee | Detail |
-|-----------|--------|
-| **Credentials stay local** | `credentials.json`, `token.json`, `config.json` stored only in skill directory. Never uploaded. |
-| **User-level daemon only** | Creates user-level timers (launchd/systemd user). Runs as your user — never root. |
-| **Calendar writes isolated** | Only writes to the `Proactive Claw — Actions` calendar. All other calendars are read-only. |
-| **Network calls gated** | Default: Google Calendar API only. Notion, Telegram, GitHub, clawhub.ai, LLM — all opt-in. |
-| **Nextcloud password** | App-specific password only. Generate at `your-nextcloud.com/settings/personal/security`. |
-| **Safe-by-default config** | `max_autonomy_level` defaults to `confirm`. All external features default to `false`. |
-| **Inspectable scripts** | `setup.sh` and `install_daemon.sh` are plain shell — no obfuscated downloads, no root commands. |
-| **clawhub OAuth scope** | `clawhub_token` downloads only the OAuth client definition. Your Google token is generated locally and never sent to clawhub.ai. |
-| **LLM rater is local-first** | Defaults to Ollama on `localhost` — no API key, no data sent anywhere. |
-| **Link graph is local** | `proactive_links.db` stores only event UIDs, fingerprints, and link metadata. All local SQLite. |
-
-**Uninstall daemon:**
+3) Approve a suggestion in chat, then run once:
 ```bash
-# macOS
-launchctl unload ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist
-rm ~/Library/LaunchAgents/ai.openclaw.proactive-claw.plist
-
-# Linux
-systemctl --user disable --now openclaw-proactive-claw.timer
-rm ~/.config/systemd/user/openclaw-proactive-claw.*
+python3 scripts/daemon.py
 ```
 
-### 📡 What Data Leaves Your Machine
+---
 
-| Service | When | What is sent | Enabled by |
-|---------|------|-------------|------------|
-| Google Calendar API | Always (core) | Calendar read/write requests with OAuth token | `feature_calendar` |
-| clawhub.ai | Setup only, if using clawhub OAuth | `clawhub_token` to fetch `credentials.json` | `clawhub_token` set in config |
-| Notion API | Only if enabled | Event title (first 50 chars, read-only) or outcome notes | `feature_cross_skill` + `NOTION_API_KEY` |
-| GitHub API | Only if enabled | Read-only: open PRs and issues via `gh` CLI | `feature_cross_skill` + `gh` CLI authenticated |
-| Telegram API | Only if enabled | Notification message text | `notification_channels` includes `telegram` |
-| Nextcloud CalDAV | Only if using Nextcloud backend | Calendar read/write via CalDAV | `calendar_backend: nextcloud` |
-| LLM rating API | Only if enabled AND using cloud backend | Outcome notes + event title + sentiment | `llm_rater.enabled` + non-localhost `base_url` |
-| ↳ api.openai.com | Only if `base_url` set to OpenAI | Same as above | `llm_rater.base_url: https://api.openai.com/v1` |
-| ↳ api.groq.com | Only if `base_url` set to Groq | Same as above | `llm_rater.base_url: https://api.groq.com/openai/v1` |
-| ↳ api.together.xyz | Only if `base_url` set to Together | Same as above | `llm_rater.base_url: https://api.together.xyz/v1` |
-| ↳ api.anthropic.com | Only if `base_url` set to Anthropic | Same as above | `llm_rater.base_url: https://api.anthropic.com/v1` |
+## Modes (choose your vibe)
 
-> 💡 **Local LLM = zero external calls.** With `base_url: http://localhost:11434/v1` (Ollama) or `http://localhost:1234/v1` (LM Studio), nothing leaves your machine.
-
-**Nothing else.** No analytics, no telemetry, no data sent to the skill author.
+- **Suggest (default):** asks before applying changes (`max_autonomy_level=confirm`)
+- **Background suggestions:** optional daemon, still asks for approval
+- **Autonomous (advanced):** explicit opt-in only (not recommended until you’ve used it for a while)
 
 ---
 
-## 🎬 Sample Scenarios
+## Presets (easy setup)
 
-### Scenario 1 — Board Meeting Prep 📋
-You have a "Q2 Board Review" on Thursday. On Tuesday morning, Proactive Claw:
-- Creates a **prep block** Wednesday 2–4pm: "🦞 Prep: Q2 Board Review"
-- Sends a nudge: *"Board meeting in 48h — want me to pull open action items and draft a talking points agenda?"*
-- After you approve, runs the orchestrator: fetches open GitHub issues, last Notion board notes, relationship brief for attendees
-- On Wednesday evening: *"Prep block starts in 1h — here are 3 likely hard questions based on last quarter's outcomes"*
+You don’t need to tune dozens of settings. Pick a preset.
 
-### Scenario 2 — Rescued Double-Booking 📅
-You accept two meetings at 3pm on Friday. Proactive Claw (P0 safety tier):
-- Immediately surfaces: *"⚠️ Conflict: 'Design Review' and 'Investor Call' both at 3pm Friday"*
-- Offers: *"Move Design Review to 4:30pm (next free slot) or Monday 10am?"*
-- You pick Monday — it moves the event and updates the prep block automatically
+**Presets are just a starting point.** Proactive Claw adjusts to you with every interaction (approvals, edits, rejections), and quickly becomes personal.
 
-### Scenario 3 — Recurring Standup Intelligence 🔄
-You have a daily standup. Proactive Claw learns it's `routine_low_stakes` (recurring, internal, zero action items). It:
-- Suppresses nudges for it — only checks in every 4th occurrence
-- On the 4th standup: *"Haven't logged a standup outcome in 3 weeks — anything worth capturing?"*
-- You say "nope" — snoozes for another 4 sessions automatically
+### A) Calm mode (minimal interruptions)
+Choose this if you want only high-value suggestions.
+- fewer prompts
+- only important events get prep/buffers
 
-### Scenario 4 — Deleted Meeting Recovery 🗑️
-You cancel "1:1 with Alice" but forget to also cancel the prep block. Proactive Claw:
-- Detects the source event missing after 2 daemon cycles
-- Creates a `confirm_delete` action: *"'1:1 with Alice' seems to have been deleted — cancel linked prep block too? [Yes / No / Don't ask]*"
-- You click Yes — prep block renamed to "🦞 [Canceled] Prep: 1:1 with Alice", deleted after 30 days
+### B) Builder mode (deep work protected)
+Choose this if you code/build and need long focus blocks.
+- defends 2–3h deep work windows
+- suggests moving meetings that fragment focus
+- stronger buffers + recovery time
 
-### Scenario 5 — Energy-Aware Scheduling ⚡
-You ask OpenClaw: *"Find me 2 hours for deep work this week"*. It:
-- Reads your energy history: Tuesday 9–11am consistently your highest-focus window
-- Checks your calendar: Tuesday 9–11am is free
-- Proposes: *"Block Tuesday 9–11am as focus time? (Your highest-energy window this week)"*
-- You approve — creates "🦞 Focus Block" with buffer 10:50–11am to decompress before your 11am call
+### C) Meetings-heavy week
+Choose this when your schedule is packed.
+- adds buffers + reset breaks
+- prevents back-to-back collapse
+- proposes follow-ups so action doesn’t slip
+
+(If you want, these presets can be expressed as a small copy/paste block in `config.json`.)
 
 ---
 
-## ✨ Features at a Glance
+## Chat scoring model (built-in; small/local recommended)
 
-### Core Features (v1.0–1.1)
+Proactive Claw includes a **chat scoring model** to rank signals (importance, urgency, disruption risk) so it knows:
+- what matters,
+- when to ask you,
+- and when to stay quiet.
 
-| # | Feature | Description |
-|---|---------|-------------|
-| 1 | 📡 Conversation Radar | Score 0–10 silently after every exchange |
-| 2 | 📅 Calendar Monitoring | Scan + conflict detection + actionable events |
-| 3 | ⚙️ Background Daemon | PLAN→EXECUTE→CLEANUP cycles every 15 min |
-| 4 | 🧠 SQLite Memory | Outcome history with TF-IDF semantic search |
-| 5 | 🔗 Cross-Skill Intelligence | GitHub + Notion context (opt-in) |
-| 6 | 📝 Natural Language Rules | User-defined rules engine |
-| 7 | 🔄 Post-Event Intelligence | Follow-ups, weekly digest, quarterly insights |
-| 8 | 🤖 Calendar Policy Engine | Autonomous prep/focus/buffer/debrief blocking |
-| 9 | 🎭 Multi-Agent Orchestration | Full pre-event preparation pipeline |
-| 10 | ⚡ Energy Prediction | Predictive energy scheduling with decay weighting |
-| 11 | ✏️ Calendar Editing | Move, find free time, clear, read in plain English |
-| 12 | 👥 Relationship Memory | Lightweight CRM from attendees + outcomes |
-| 13 | 🎙️ Voice-First | Whisper integration + intent routing |
-| 14 | 🔔 Adaptive Notifications | Self-tuning channel + time learning with decay |
-| 15 | 👫 Team Awareness | Opt-in cross-calendar coordination |
-| 16 | 🤖 LLM Interaction Rater | Local model rates check-in quality |
-
-### New in v1.2.0 🆕
-
-| # | Feature | Description |
-|---|---------|-------------|
-| 17 | 🎯 Proactivity Engine | Unified scoring: energy + notification + policy + relationship |
-| 18 | 🚦 Interruption Governance | Priority tiers P0–P5, max nudges/day, cooldowns |
-| 19 | 🔍 Explainability Mode | Trace every nudge/policy/energy decision |
-| 20 | 🎚️ Proactivity Intensity Dial | `low` / `balanced` / `executive` mode |
-| 21 | 🔐 Max Autonomy Cap | `advisory` / `confirm` / `autonomous` global override |
-| 22 | ⏳ Memory Decay | Exponential recency weighting across all modules |
-| 23 | 🏥 System Health Audit | 7 diagnostic checks: DB, daemon, config, calendar, flags, stale, disk |
-| 24 | ⚡ Policy Conflict Detection | Pairwise detection of contradictory policies |
-| 25 | 🧙 Config Wizard | Interactive CLI setup with validation |
-| 26 | 🔬 Simulation Mode | Dry-run daemon over N future days |
-| 27 | 🌙 Quiet Hours | Suppress non-safety nudges during quiet windows |
-| 28 | 💾 Data Export/Import | JSON/CSV backup + restore |
-| 29 | 📊 Drift Monitoring | Monthly behaviour reports with delta alerts |
-| 30 | 📆 2-Calendar Architecture | Read user calendars, write to Action Calendar only |
-| 31 | 🕸️ Link Graph | SQLite graph connecting user events ↔ planned actions |
-| 32 | 📋 Action Planner | PLAN phase: ingest, detect missing, auto-relink, create actions |
-| 33 | ▶️ Action Executor | EXECUTE phase: fire due actions idempotently |
-| 34 | 🗑️ Deletion Detection | Fingerprint-based move detection + confirm/suppress workflow |
-| 35 | 🦞 Soft-Cancel Policy | Rename canceled events, cleanup after N days |
+**Recommendation:** use a **small model**, ideally **local** (fast, cheap, private).  
+Your planning model can be bigger; scoring should stay small and fast.
 
 ---
 
-## 🛠️ Setup
+## Scenarios (mini transcripts)
 
-### Quick Start
+### 1) Presentation tomorrow → prep + buffer
+You: Tomorrow I’m presenting the roadmap to the board.  
+Claw (score = 0.92): High impact. You usually prep ~70 minutes for presentations.  
+Claw: Want me to reserve **08:40–09:50** for prep + a **10-min buffer** before the 10:00 meeting?
 
+### 2) Deep work protection (developer mode)
+Claw (score = 0.78): This meeting would split your deep work block (09:30–12:00).  
+Claw: Prefer to **move it to 13:00**, or keep it and add a **20-min recovery buffer** after?
+
+### 3) Back-to-back day → buffers + reset
+Claw (score = 0.81): Tomorrow is back-to-back from 10:00–14:00.  
+Claw: Add **10-min buffers** between meetings + a **25-min reset break** around midday?
+
+### 4) Follow-up that tends to slip
+You: I promised I’ll send the summary.  
+Claw (score = 0.66): Time-sensitive.  
+Claw: Want a **20-min follow-up block** right after the meeting (or at **17:10**)?
+
+### 5) It becomes personal fast (recurring pattern)
+Claw (score = 0.71): I’ve noticed a pattern for “Client Review” meetings:
+- you prefer **30-min prep** the same day
+- **10-min buffer** before
+- no meetings after **18:00**  
+Claw: Want me to propose this pattern whenever a new “Client Review” appears (still asking you to approve)?
+
+---
+
+## Graph B — technical architecture (backend = Google OR Nextcloud)
+
+```text
+TECHNICAL ARCHITECTURE (backend = Google OR Nextcloud)
+
+             +----------------------------------------------+
+             |        Calendar backend (choose ONE)         |
+             |  +-----------------------+  OR  +----------+ |
+             |  | Google (OAuth/API)    |      | Nextcloud| |
+             |  +-----------------------+      | (CalDAV) | |
+             |                                 +----------+ |
+             +-----------------------+----------------------+
+                                     ^
+        events / changes (propose+apply, Actions only)       |
+                                     |
+                                     v
++----------------------+      +------------------------------------------+      +----------------------+
+|  OpenClaw Chat UI    | <--> |           Proactive Claw Core            | <--> |  Local state         |
+| prompts <-> decisions|      | 1) Ingest: events + chat signals         |      | config/token/SQLite  |
+| feedback loop        |      | 2) Score: urgency/importance (local rec) |      | logs (optional)      |
++----------------------+      | 3) Plan : prep + buffers + follow-ups    |      +----------------------+
+                              | 4) Approve (default): ask/confirm in chat|
+                              | 5) Apply : write approved changes        |
+                              | 6) Learn : from your approvals/edits     |
+                              +------------------------------------------+
+                                     ^
+                                     |
+                           Optional (explicit opt-in)
+                                     |
+                                     v
+                              +----------------------+
+                              | Optional daemon      |
+                              | periodic scan/suggest|
+                              +----------------------+
+```
+
+---
+
+# Setup
+
+## 0) Requirements
+- `python3` available on your machine
+- Google backend: `credentials.json` (OAuth client)  
+  OR
+- Nextcloud backend: CalDAV URL + app password (or token)
+
+---
+
+## 1) Install dependencies + bootstrap config
 ```bash
-bash ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh
+bash scripts/setup.sh
 ```
 
-### Option A — Manual Google Credentials (Recommended)
+---
 
-1. Go to **https://console.cloud.google.com** → New project → Enable Google Calendar API
-2. Create OAuth 2.0 credentials (Desktop app) → download JSON
-3. `mv ~/Downloads/credentials.json ~/.openclaw/workspace/skills/proactive-claw/credentials.json`
-4. Run `setup.sh`
+## 2) Choose your calendar backend
 
-### Option B — clawhub OAuth (Optional helper, not recommended for most users)
+### Option A — Google Calendar (OAuth)
+You provide:
+- `credentials.json` (OAuth client)
 
-1. Go to **https://clawhub.ai/settings/integrations** → Connect Google Calendar → copy your token
-2. In `config.json` set `"clawhub_token": "your-token-here"`
-3. Run `bash scripts/optional/setup_clawhub_oauth.sh` — fetches OAuth client definition only (not your token or calendar data)
-4. Run `setup.sh` to complete the rest of setup
+Proactive Claw creates:
+- `token.json` after OAuth
 
-### Option C — Nextcloud CalDAV
+### Option B — Nextcloud (CalDAV)
+You provide:
+- CalDAV base URL
+- app password
 
-```json
-"calendar_backend": "nextcloud",
-"nextcloud": {
-  "url": "https://your-nextcloud.com",
-  "username": "...",
-  "password": "app-password"
-}
-```
+---
 
-> ⚠️ Use a Nextcloud **app-specific password**, not your account password. Generate one at `your-nextcloud.com/settings/personal/security`.
+## 3) Configure behavior
 
-Run `setup.sh` — connects, creates Proactive Claw — Actions calendar, saves URL.
-
-### Install Background Daemon
-
+Interactive wizard:
 ```bash
-bash ~/.openclaw/workspace/skills/proactive-claw/scripts/install_daemon.sh
+python3 scripts/config_wizard.py
 ```
 
-| Platform | Method | Log |
-|----------|--------|-----|
-| macOS | launchd plist, runs every 15 min | `~/.openclaw/.../daemon.log` |
-| Linux | systemd user timer | `~/.openclaw/.../daemon.log` |
-
-### Additional Setup Steps
-
+Safe defaults:
 ```bash
-# Migrate existing outcomes to SQLite
-python3 ~/.openclaw/workspace/skills/proactive-claw/scripts/memory.py --import-outcomes
-
-# Interactive config wizard (optional but recommended)
-python3 ~/.openclaw/workspace/skills/proactive-claw/scripts/config_wizard.py
+python3 scripts/config_wizard.py --defaults
 ```
 
 ---
 
-## ⚙️ Configuration
-
-**File:** `~/.openclaw/workspace/skills/proactive-claw/config.json`
-
-### Core Settings
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `calendar_backend` | `"google"` | `google` or `nextcloud` |
-| `timezone` | `"UTC"` | IANA tz — e.g. `"Europe/Berlin"` |
-| `daemon_interval_minutes` | `15` | How often daemon scans |
-| `scan_days_ahead` | `7` | Days to look ahead |
-| `user_email` | `""` | Your email (for filtering) |
-
-### Governance Settings
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `proactivity_mode` | `"balanced"` | `low` · `balanced` · `executive` |
-| `max_autonomy_level` | `"confirm"` | `advisory` · `confirm` · `autonomous` |
-| `quiet_hours.weekdays` | `"22:00-07:00"` | Suppress non-safety nudges at night |
-| `quiet_hours.weekends` | `"21:00-09:00"` | Suppress non-safety nudges on weekends |
-| `max_nudges_per_day` | `12` | Hard cap on daily nudges |
-| `nudge_cooldown_minutes` | `30` | Minimum gap after a dismissed nudge |
-| `memory_decay_half_life_days` | `90` | Half-life for exponential decay weighting |
-
-### Calendar Settings
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `watched_calendars` | `[]` | Calendar IDs to watch (empty = all except action calendar) |
-| `ignored_calendars` | `[]` | Calendar IDs to skip entirely |
-| `action_cleanup_days` | `30` | Days before canceled action events are deleted |
-| `openclaw_cal_id` | `""` | ID of the action calendar (set by setup.sh) |
-| `default_user_calendar` | `""` | Primary calendar for event creation |
-
-### Notification Settings
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `notification_channels` | `["openclaw","system"]` | `openclaw` · `system` · `telegram` |
-| `telegram.bot_token` | `""` | Telegram bot token |
-| `telegram.chat_id` | `""` | Your Telegram chat ID |
-| `notes_destination` | `"local"` | `local` · `apple-notes` · `notion` |
-| `clawhub_token` | `""` | Token from clawhub.ai/settings/integrations |
-
-### Feature Flags
-
-All features default **OFF**. Enable only what you need in `config.json`. Run `python3 config_wizard.py` for guided setup.
-
-**Local features (default: `false` — no external network calls):**
-
-| Flag | Description |
-|------|-------------|
-| `feature_conversation` | Conversation radar scoring |
-| `feature_calendar` | Calendar scanning |
-| `feature_daemon` | Background daemon |
-| `feature_memory` | SQLite memory |
-| `feature_conflicts` | Conflict detection |
-| `feature_rules` | Rules engine |
-| `feature_intelligence_loop` | Follow-ups + digest |
-| `feature_policy_engine` | Calendar policies |
-| `feature_orchestrator` | Multi-agent orchestration |
-| `feature_energy` | Energy prediction |
-| `feature_cal_editor` | Calendar editing |
-| `feature_relationship` | Relationship CRM |
-| `feature_adaptive_notifications` | Self-tuning notifications |
-| `feature_proactivity_engine` | Unified proactivity scoring |
-| `feature_interrupt_controller` | Interruption governance |
-| `feature_explainability` | Decision trace |
-| `feature_health_check` | System diagnostics |
-| `feature_simulation` | Simulation mode |
-| `feature_export` | Data export/import |
-| `feature_behaviour_report` | Drift monitoring |
-| `feature_config_wizard` | Config wizard |
-| `feature_policy_conflict_detection` | Policy conflict alerts |
-
-**External features (default: `false` — contact external services, must explicitly opt in):**
-
-| Flag | Description |
-|------|-------------|
-| `feature_cross_skill` | GitHub/Notion context (makes external network calls) |
-| `feature_voice` | Voice transcription (requires whisper skill) |
-| `feature_team_awareness` | Team cross-calendar (accesses other calendars) |
-| `feature_llm_rater` | LLM rater (external if using cloud backend) |
-| `feature_telegram_notifications` | Telegram push notifications (requires bot token) |
-
-### LLM Rater Config
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `llm_rater.enabled` | `false` | Enable the rater |
-| `llm_rater.base_url` | `"http://localhost:11434/v1"` | LLM endpoint (Ollama = local, no key needed) |
-| `llm_rater.model` | `"qwen2.5:3b"` | Model name |
-| `llm_rater.api_key_env` | `""` | Env var holding API key (empty = no key) |
-| `llm_rater.timeout` | `30` | Request timeout in seconds |
-
----
-
-## 📖 Feature Reference
-
----
-
-### Feature 1 — 📡 Conversation Radar
-
-Score 0–10 silently after every exchange. Ask once, briefly, at threshold.
-
-| Score Contribution | Signal |
-|-------------------|--------|
-| +3 | Explicit future event |
-| +3 | Active preparation language |
-| +2 | Importance / stress markers |
-| +2 | Hard deadline |
-| +1 | Recurring obligation |
-| +1 | Post-event reflection |
-| −2 | Hypothetical or historical |
-
-**Before asking**, check pending nudges from daemon:
+## 4) Optional background execution
 ```bash
-python3 ~/.openclaw/workspace/skills/proactive-claw/scripts/cross_skill.py --pending-nudges
-```
-If nudges exist, surface the most urgent one first instead of a new ask.
-
----
-
-### Feature 2 — 📅 Calendar Monitoring + Conflict Detection
-
-```bash
-# Scan calendar (cache-aware)
-python3 scan_calendar.py
-
-# Detect conflicts
-python3 scan_calendar.py | python3 conflict_detector.py
-```
-
-**Conflict types detected:** Overlaps · Overloaded days (4+ events) · Back-to-back runs (3+ with <10 min gaps)
-
-**Library function** (used by action_planner):
-```python
-from scan_calendar import scan_user_events
-events = scan_user_events(config, backend, now, time_max)
-# Respects watched_calendars and ignored_calendars
+bash scripts/install_daemon.sh
 ```
 
 ---
 
-### Feature 3 — ⚙️ Background Daemon + Conversation Mode
+## FAQ
 
-#### Daemon (Automatic, every 15 min)
+### Will this mess up my calendar?
+By default: **no.** Proactive Claw suggests changes in chat and applies only what you approve (`max_autonomy_level = confirm`).
 
-**Phase 1 — PLAN** (`action_planner.py`):
-- Ingest user events into link graph
-- Detect missing events (deletion/move detection)
-- Auto-relink moved events via fingerprint matching
-- Create confirm_delete actions after 2 consecutive misses
-- Plan reminder, prep, buffer, and debrief actions
+### Where does it store data?
+Locally under:
+`~/.openclaw/workspace/skills/proactive-claw/`
 
-**Phase 2 — EXECUTE** (`action_executor.py`):
-- Fire only due actions from the action calendar
-- Idempotency: check `sent_actions` table before sending
-- Skip paused/canceled/suppressed actions
+### Does everything run locally?
+Yes — it can. The scoring model is recommended to be small/local. The calendar backend still connects to your chosen provider because that’s where your calendar lives.
 
-**Phase 3 — CLEANUP** (once daily, `action_cleanup.py`):
-- Rename paused events → `🦞 [Paused] Original Title`
-- Rename canceled events → `🦞 [Canceled] Original Title`
-- Delete canceled entries older than `action_cleanup_days`
+### Can I use it without Google?
+Yes — use **Nextcloud (CalDAV)**.
 
-**Legacy fallback**: If `action_planner` fails, falls back to v1.1.x scan→notify flow automatically.
+### What is the optional daemon?
+A user-level scheduler (no sudo) that runs periodically so Proactive Claw can suggest proactively. It is **off by default**.
 
-```bash
-python3 daemon.py --status
-python3 daemon.py --simulate --days 7
-```
+### What does “learning” mean here?
+It learns your preferences from your approvals/edits over time: prep durations, preferred times, buffer sizes, meeting types that matter, and deep work rules.
 
-#### Conversation Mode (Manual, Per-Request)
-
-OpenClaw can call scripts during conversations. **This is NOT automatic** — each call requires:
-1. You enable it explicitly (e.g., "Check my calendar")
-2. OpenClaw shows you the proposed action
-3. You approve before execution
-4. `max_autonomy_level: confirm` enforces step 3 (default)
+### What is the chat scoring model?
+A lightweight model that assigns numeric scores (e.g., 0.66, 0.92) to decide what matters and when to prompt you. Recommended: small/local model.
 
 ---
 
-### Feature 4 — 🧠 SQLite Memory + Semantic Search
+## Troubleshooting (by symptom)
 
-```bash
-python3 memory.py --save '{"event_title":"Demo","sentiment":"positive","follow_up_needed":true}'
-python3 memory.py --search "times I felt underprepared"
-python3 memory.py --open-actions
-python3 memory.py --summary --days 90
-```
-
-Memory uses **decay-weighted averages** — recent outcomes count more. Configure via `memory_decay_half_life_days`.
+- **“Too many prompts”** → use Calm mode; reject a few times; it will adapt  
+- **“Not proactive enough”** → enable daemon; increase sensitivity  
+- **“Prep blocks are wrong length”** → edit them twice; it will converge  
+- **“OAuth issues”** → re-run setup; revoke token and re-auth if needed  
 
 ---
 
-### Feature 5 — 🔗 Cross-Skill Intelligence
+## Uninstall
 
-> **Scope:** `cross_skill.py` does NOT read other skills' tokens, config files, or stored data.
-> It only checks if specific skills are installed and uses their CLI tools if present.
-
-```bash
-python3 cross_skill.py --event-title "Sprint Review" --event-type "one_off_high_stakes"
-python3 cross_skill.py --list-available
-```
-
-| Skill | Requires | What it reads |
-|-------|---------|---------------|
-| GitHub | `gh` CLI authenticated | Open PRs + issues (read-only) |
-| Notion | `NOTION_API_KEY` env var | Pages matching event title |
-
-`feature_cross_skill` defaults to `false`.
+1) Remove daemon (if installed)  
+2) Delete:
+`~/.openclaw/workspace/skills/proactive-claw/`  
+3) Revoke Google OAuth access if you used Google:
+myaccount.google.com/permissions
 
 ---
 
-### Feature 6 — 📝 Natural Language Rules
+## Glossary
 
-```bash
-python3 rules_engine.py --parse "Never bother me about standups unless I haven't spoken in 2 weeks"
-python3 rules_engine.py --parse "Always prep me 2 days before anything with the word board"
-python3 rules_engine.py --list
-```
-
----
-
-### Feature 7 — 🔄 Post-Event Intelligence Loop
-
-```bash
-python3 intelligence_loop.py --weekly-digest
-python3 intelligence_loop.py --check-followups
-python3 intelligence_loop.py --create-followups
-python3 intelligence_loop.py --summary --days 90
-```
+- **Prep block:** time reserved before an event to prepare  
+- **Buffer:** short gap that prevents schedule collisions  
+- **Deep work:** uninterrupted focus block  
+- **Daemon:** optional background scheduler (off by default)  
+- **Score:** 0–1 number indicating importance/urgency  
 
 ---
 
-### Feature 8 — 🤖 Calendar Policy Engine
-
-Parse and execute natural language calendar policies autonomously:
-
-```bash
-python3 policy_engine.py --parse "Always block 1 hour of prep time before board meetings"
-python3 policy_engine.py --parse "Add 15 min buffer after back-to-back meetings"
-python3 policy_engine.py --parse "Block focus time every Tuesday morning"
-python3 policy_engine.py --parse "Always schedule a debrief 30 min after investor calls"
-python3 policy_engine.py --evaluate   # run all policies against current calendar
-python3 policy_engine.py --list
-python3 policy_engine.py --delete <id>
-```
-
-Respects `max_autonomy_level`:
-
-| Level | Behavior |
-|-------|----------|
-| `advisory` | Suggests actions — never executes |
-| `confirm` | Presents action for approval |
-| `autonomous` | Executes immediately |
-
----
-
-### Feature 9 — 🎭 Multi-Agent Orchestration
-
-```bash
-python3 orchestrator.py \
-  --event-id <id> --event-title "Sprint Review" \
-  --event-type one_off_high_stakes \
-  --event-datetime 2025-03-15T10:00:00
-
-python3 orchestrator.py --dry-run ...
-```
-
-**Pipeline:** Open action items → cross-skill context → outcome patterns → prep block → draft email → Notion notes → enriched nudge.
-
----
-
-### Feature 10 — ⚡ Predictive Energy Scheduling
-
-Uses **decay-weighted scoring** — recent energy data counts more than historical data.
-
-```bash
-python3 energy_predictor.py --analyse
-python3 energy_predictor.py --suggest-focus-time
-python3 energy_predictor.py --check "2025-03-15T09:00:00" one_off_high_stakes
-python3 energy_predictor.py --block-focus-week
-```
-
----
-
-### Feature 11 — ✏️ Natural Language Calendar Editing
-
-```bash
-python3 cal_editor.py --move "Sprint Review" "next Monday 2pm"
-python3 cal_editor.py --find-free "tomorrow" --duration 60
-python3 cal_editor.py --clear "this Friday afternoon"   # OpenClaw events only (safe)
-python3 cal_editor.py --read "this week"
-python3 cal_editor.py --reschedule-conflict
-```
-
----
-
-### Feature 12 — 👥 Relationship Memory
-
-```bash
-python3 relationship_memory.py --ingest
-python3 relationship_memory.py --lookup "Alice"
-python3 relationship_memory.py --brief "Sprint Review"
-python3 relationship_memory.py --stale --days 30
-python3 relationship_memory.py --top
-python3 relationship_memory.py --add-note alice@example.com "Prefers async updates"
-```
-
----
-
-### Feature 13 — 🎙️ Voice-First Interaction
-
-```bash
-python3 voice_bridge.py --check-whisper
-python3 voice_bridge.py --record --seconds 10
-python3 voice_bridge.py --transcribe /path/audio.wav
-python3 voice_bridge.py --route "move sprint review to next Monday"
-```
-
-Backends: OpenClaw `whisper` skill → `openai-whisper` package → `whisper` CLI.
-
----
-
-### Feature 14 — 🔔 Adaptive Notification Intelligence
-
-Uses **decay-weighted response scoring** — recent response patterns count more.
-
-```bash
-python3 adaptive_notifications.py \
-  --record-response <nudge_id> opened \
-  --event-type one_off_high_stakes \
-  --channel system --sent-at 2025-03-15T09:00:00
-
-python3 adaptive_notifications.py --get-channel "one_off_high_stakes"
-python3 adaptive_notifications.py --get-timing "Monday"
-python3 adaptive_notifications.py --analyse
-```
-
----
-
-### Feature 15 — 👫 Team Awareness
-
-Opt-in cross-calendar coordination. All sharing is explicit — nothing automatic.
-
-```bash
-python3 team_awareness.py --add-member alice@example.com "Alice"
-python3 team_awareness.py --availability "this week"
-python3 team_awareness.py --meeting-time "Sprint Review" \
-  --attendees "alice@example.com,bob@example.com"
-```
-
----
-
-### Feature 16 — 🤖 LLM Interaction Rater
-
-Local-first quality rating. Defaults to Ollama — no cloud account needed.
-
-```bash
-python3 llm_rater.py --outcome-file <path>
-python3 llm_rater.py --check-backend
-python3 llm_rater.py --list-backends
-```
-
----
-
-### Feature 17 — 🎯 Proactivity Engine 🆕
-
-Unified scoring core that merges 5 signal sources into a single proactivity score per event:
-
-```bash
-python3 proactivity_engine.py --score <scan_json>
-python3 proactivity_engine.py --score-event <event_json>
-python3 proactivity_engine.py --history <event_id>
-```
-
-**Signal merging:**
-
-| Signal | Source |
-|--------|--------|
-| `energy_delta` | `energy_predictor.check_event_timing()` |
-| `notification_delta` | `adaptive_notifications` frequency preference |
-| `policy_delta` | `policy_engine` boost/suppress |
-| `relationship_delta` | `relationship_memory` high-impact contacts |
-| `base_score` | Conversation radar + event type |
-
-Applies `proactivity_mode` multiplier (low=0.5, balanced=1.0, executive=1.3). Stores results in `proactivity_scores` SQLite table. **Local only.**
-
----
-
-### Feature 18 — 🚦 Interruption Governance 🆕
-
-Priority-based nudge filtering with enforcement of daily limits, cooldowns, and quiet hours:
-
-```bash
-python3 interrupt_controller.py --filter <scan_json>
-python3 interrupt_controller.py --status
-python3 interrupt_controller.py --record-dismissal <event_id>
-python3 interrupt_controller.py --quiet-hours-check
-```
-
-**Priority tiers:**
-
-| Tier | Category | Example |
-|------|----------|---------|
-| P0 🔴 | Safety | Conflicts, double-books |
-| P1 🟠 | High-stakes prep | < 24h to important event |
-| P2 🟡 | Policy-triggered | Auto-blocked prep/focus time |
-| P3 🔵 | Follow-up | Stale action items |
-| P4 ⚪ | Routine | Periodic check-ins |
-| P5 ⚫ | Informational | Digests, stats |
-
-**Mode limits:** `low` = 3 · `balanced` = 6 · `executive` = 12 nudges per session. **Local only.**
-
----
-
-### Feature 19 — 🔍 Explainability Mode 🆕
-
-Trace every decision the system makes:
-
-```bash
-python3 explain.py --explain-nudge <event_id>         # show signal breakdown
-python3 explain.py --explain-policy <policy_id>        # show policy match history
-python3 explain.py --explain-energy-decision <event_id> # show energy slot data used
-python3 explain.py --trace <event_id>                  # full decision trace
-```
-
-Shows: all signal contributions, priority classification, suppression reasons, scoring breakdowns. **Local only.**
-
----
-
-### Feature 20 — 🎚️ Proactivity Intensity Dial 🆕
-
-Global mode that controls scoring multiplier and nudge limits:
-
-| Mode | Score Multiplier | Max Nudges/Session |
-|------|:---------------:|:-----------------:|
-| `low` | 0.5 | 3 |
-| `balanced` | 1.0 | 6 |
-| `executive` | 1.3 | 12 |
-
-```json
-"proactivity_mode": "balanced"
-```
-
----
-
-### Feature 21 — 🔐 Max Autonomy Cap 🆕
-
-Global override that limits what the system can do without asking:
-
-| Level | Behavior |
-|-------|----------|
-| `advisory` | Suggest only — never create or modify events |
-| `confirm` | Present action for approval before executing ✅ **Default** |
-| `autonomous` | Act immediately (not recommended) |
-
-```json
-"max_autonomy_level": "confirm"
-```
-
----
-
-### Feature 22 — ⏳ Memory Decay 🆕
-
-Exponential recency weighting across all modules. Recent data gets higher weight, old data fades naturally.
-
-**Used by:** `energy_predictor.py` · `adaptive_notifications.py` · `memory.py` · `proactivity_engine.py`
-
-```json
-"memory_decay_half_life_days": 90
-```
-
-Shared library: `scripts/decay.py` — pure math, no I/O, no network, no subprocess.
-
----
-
-### Feature 23 — 🏥 System Health Audit 🆕
-
-7 diagnostic checks in one command:
-
-```bash
-python3 health_check.py                    # full report
-python3 health_check.py --check db         # database integrity (PRAGMA integrity_check)
-python3 health_check.py --check daemon     # is daemon running?
-python3 health_check.py --check config     # config validity
-python3 health_check.py --check calendar   # calendar connectivity
-python3 health_check.py --check flags      # feature flag consistency
-python3 health_check.py --check stale      # stale data detection (30+ days no outcomes)
-python3 health_check.py --check disk       # disk usage (memory.db, log size)
-```
-
-> **Note:** The `daemon` check uses `subprocess` to run `launchctl list` (macOS) or `systemctl --user status` (Linux) — local process inspection only. The `calendar` check uses the same network scope as core calendar features.
-
----
-
-### Feature 24 — ⚡ Policy Conflict Detection 🆕
-
-Detects contradictory policies before they cause issues:
-
-```bash
-python3 policy_conflict_detector.py --check-all
-python3 policy_conflict_detector.py --check-new '<policy_json>'
-```
-
-**Detects:** Same event type with conflicting actions · Overlapping time conditions · Autonomy mismatches · Duplicate policies. **Local only.**
-
----
-
-### Feature 25 — 🧙 Config Wizard 🆕
-
-Interactive CLI setup — the safest way to create `config.json`:
-
-```bash
-python3 config_wizard.py              # interactive mode (recommended)
-python3 config_wizard.py --defaults   # non-interactive, safe defaults
-python3 config_wizard.py --validate   # check existing config
-```
-
-Detects system timezone, walks through: backend · mode · autonomy · channels · quiet hours. Writes `config.json` only.
-
----
-
-### Feature 26 — 🔬 Simulation Mode 🆕
-
-Dry-run the daemon over N future days to preview what would fire:
-
-```bash
-python3 daemon.py --simulate --days 7
-```
-
-All state in-memory only — **no writes** to DB, calendar, or files. Safe to run anytime.
-
----
-
-### Feature 27 — 🌙 Quiet Hours 🆕
-
-Suppress non-safety (non-P0) nudges during configured quiet windows:
-
-```json
-"quiet_hours": {
-  "weekdays": "22:00-07:00",
-  "weekends": "21:00-09:00"
-}
-```
-
-P0 safety nudges (double-bookings, conflicts) still come through. Implemented in `interrupt_controller.py`.
-
----
-
-### Feature 28 — 💾 Data Export / Import 🆕
-
-Backup and restore all local data:
-
-```bash
-python3 export_data.py --export --output ~/backup --format json
-python3 export_data.py --export --output ~/backup --format csv
-python3 export_data.py --import ~/backup
-python3 export_data.py --list-tables
-```
-
-Exports all SQLite tables + redacted config (secrets stripped). Import uses `INSERT OR REPLACE`. **Local file I/O only.**
-
----
-
-### Feature 29 — 📊 Drift Monitoring 🆕
-
-Monthly behaviour reports that detect concerning trends:
-
-```bash
-python3 behaviour_report.py --monthly
-python3 behaviour_report.py --snapshot
-python3 behaviour_report.py --compare "2025-01" "2025-02"
-python3 behaviour_report.py --drift-alert
-```
-
-**Alerts when:** Dismiss rate increases >20% · Prep rate drops >15% · Negative sentiment rises >15%. **Local only.**
-
----
-
-### Feature 30 — 📆 2-Calendar Architecture 🆕
-
-Your calendars are **read-only**. All actions are written to the **"Proactive Claw — Actions"** calendar.
-
-```json
-"watched_calendars": [],       // which to monitor (empty = all except action calendar)
-"ignored_calendars": [],       // which to skip entirely
-"openclaw_cal_id": "..."       // set automatically by setup.sh
-```
-
-**Migration:** `setup.sh` recognises both old name ("OpenClaw") and new name ("Proactive Claw — Actions") — existing setups migrate automatically.
-
----
-
-### Feature 31 — 🕸️ Link Graph 🆕
-
-SQLite database (`proactive_links.db`) connecting user events to planned actions:
-
-| Table | Purpose |
-|-------|---------|
-| `user_events` | Tracked user events with fingerprint + missing_count |
-| `action_events` | Planned actions (reminder, prep, buffer, debrief, confirm_delete) |
-| `links` | Connects user_events ↔ action_events |
-| `suppression` | Events the user said "don't ask me about this" |
-| `sent_actions` | Idempotency log — action_uid + due_ts = unique key |
-
-```bash
-python3 link_store.py --status       # graph stats
-python3 link_store.py --missing      # events with missing_count > 0
-python3 link_store.py --links <uid>  # show all linked actions for a user event
-```
-
-**Fingerprint:** SHA256 of normalized `title|start|end|attendees|location` — detects moved/recreated events. **Local only.**
-
----
-
-### Feature 32 — 📋 Action Planner (PLAN Phase) 🆕
-
-```bash
-python3 action_planner.py --plan      # full plan cycle
-python3 action_planner.py --dry-run   # show what would be planned
-python3 action_planner.py --status    # show plan stats
-```
-
-**Steps:**
-1. **Ingest** — Upsert all seen user events, reset missing_count
-2. **Detect missing** — Mark unseen events, increment missing_count, pause linked actions
-3. **Auto-relink** — Check fingerprint/title match for moved events
-4. **Confirm delete** — After ≥2 consecutive misses, create confirm_delete action
-5. **Plan actions** — Create reminder, prep, buffer, debrief actions based on policies
-
----
-
-### Feature 33 — ▶️ Action Executor (EXECUTE Phase) 🆕
-
-```bash
-python3 action_executor.py --execute  # fire due actions
-python3 action_executor.py --dry-run  # show what would fire
-python3 action_executor.py --due      # list due actions
-```
-
-- Idempotent: checks `sent_actions` table before sending
-- Skips paused/canceled/suppressed actions
-- Default lookahead: 20 minutes (> daemon interval of 15 min)
-
----
-
-### Feature 34 — 🗑️ Deletion Detection 🆕
-
-When a user event disappears from the calendar:
-
-| Miss # | Action |
-|--------|--------|
-| 1st miss | `missing_count` incremented, linked actions paused, fingerprint check attempted |
-| 2nd miss | `confirm_delete` action created with 3 options |
-
-**Confirm delete options:**
-```bash
-python3 confirm_delete.py --yes <user_event_uid>       # mark deleted, cancel linked actions
-python3 confirm_delete.py --no <user_event_uid>        # 24h cooldown, expanded recovery scan
-python3 confirm_delete.py --dont-ask <user_event_uid>  # suppress event permanently
-```
-
-**Local only.**
-
----
-
-### Feature 35 — 🦞 Soft-Cancel Policy 🆕
-
-Canceled action events aren't deleted immediately — they're renamed so users can see what happened:
-
-| Status | Calendar Title |
-|--------|---------------|
-| Paused | `🦞 [Paused] Original Title` |
-| Canceled | `🦞 [Canceled] Original Title` |
-
-```bash
-python3 action_cleanup.py --cleanup             # run cleanup cycle
-python3 action_cleanup.py --cleanup --dry-run   # show what would be cleaned
-python3 action_cleanup.py --status              # show cleanup stats
-```
-
-Entries older than `action_cleanup_days` (default 30) are permanently deleted.
-
----
-
-## 🏷️ PC_ACTION Metadata Encoding
-
-Action calendar events include a machine-readable marker in the description for cross-backend compatibility:
-
-```
-PC_ACTION: {"action_event_uid":"abc123","action_type":"reminder","source_event_uid":"def456","status":"active"}
-```
-
-This allows the system to track which action events belong to which user events, even when using CalDAV backends that don't support custom properties. **Pure string encoding — no I/O.**
-
-```bash
-python3 -c "from action_codec import decode_action_description; print(decode_action_description('...'))"
-```
-
----
-
-## 🔁 Recurring Event Intelligence
-
-| Type | Detection | Behaviour |
-|------|-----------|-----------|
-| `routine_low_stakes` | Recurring + internal + avg 0 action items | Suppress — every 4th occurrence only |
-| `routine_high_stakes` | Recurring + external OR avg ≥ 2 action items | Always check in, personalise with history |
-| `one_off_standard` | Not recurring, < 60 min, internal | Standard scoring |
-| `one_off_high_stakes` | Not recurring + external OR importance signals | Max prep — full orchestration pipeline |
-
----
-
-## 📝 Auto Agenda & Talking Points
-
-| Event Type | Auto-generated Content |
-|-----------|----------------------|
-| Presentation / Demo | Hook → Problem → Solution → Demo → CTA |
-| Interview | STAR prompts for role/company if mentioned |
-| 1:1 | Open action items + relationship brief |
-| Standup | GitHub activity from cross_skill.py |
-| Board / Investor | Metrics, narrative arc, likely hard questions |
-| Workshop | Desired outcomes, pre-reads |
-| External (no history) | Company/attendee context + relationship brief |
-
----
-
-## ⚠️ Error Handling
-
-| Error | User Message |
-|-------|-------------|
-| `calendar_backend_unavailable` | "Can't reach your calendar. Try again, or continue without calendar features?" |
-| `failed_to_list_calendars` | "Trouble reading calendars. Check connection and that setup.sh ran." |
-| `failed_to_create_events` | "Couldn't create check-in events — [detail]. Try again?" |
-| Setup not run | "Calendar not set up yet. Run: `bash ~/.openclaw/workspace/skills/proactive-claw/scripts/setup.sh`" |
-| `python_version_too_old` | "Python 3.8+ required. Install at https://www.python.org/downloads/" |
-| Daemon not installed | "Background notifications are off. Run install_daemon.sh to enable." |
-| Voice backend missing | "No transcription backend found. Run: `pip install openai-whisper`" |
-| Team calendar not accessible | "Alice's calendar isn't accessible. Ask her to share it with your Google account." |
-| `action_planner_failed` | Falls back to v1.1.x scan→notify flow automatically |
-| `link_graph_unavailable` | "Link graph database unavailable. Actions may not be tracked." |
-
----
-
-## 📋 Script Audit — Full Inventory
-
-All v1.2.0 scripts are **local-only** unless noted.
-
-| Script | Network | Subprocess | Notes |
-|--------|---------|------------|-------|
-| `scan_calendar.py` | Google/Nextcloud API | — | Core calendar read |
-| `conflict_detector.py` | — | — | Local analysis |
-| `daemon.py` | Google/Nextcloud API, Telegram (opt-in) | `osascript` (macOS), `notify-send` (Linux) | Core daemon loop |
-| `memory.py` | — | — | Local SQLite |
-| `capture_outcome.py` | Notion API (opt-in) | `osascript` (Apple Notes, opt-in) | Outcome storage |
-| `create_checkin.py` | Google/Nextcloud API | — | Creates calendar check-in events |
-| `cross_skill.py` | Notion API (opt-in), GitHub via `gh` CLI (opt-in) | `gh pr list`, `gh issue list` (opt-in) | External context |
-| `rules_engine.py` | — | — | Local SQLite |
-| `intelligence_loop.py` | — | `python3` (calls scan/conflict scripts) | Local orchestration |
-| `policy_engine.py` | Google/Nextcloud API (creates events) | — | Calendar writes to action calendar only |
-| `orchestrator.py` | — | `python3` (calls sub-scripts) | Local orchestration |
-| `energy_predictor.py` | Google/Nextcloud API (creates focus blocks) | — | Calendar writes to action calendar only |
-| `cal_editor.py` | Google/Nextcloud API | `python3` (calls scan/conflict) | Calendar read/write |
-| `relationship_memory.py` | — | — | Local SQLite |
-| `voice_bridge.py` | — | `whisper`, `sox`, `arecord`/`afrecord` | Local audio processing |
-| `adaptive_notifications.py` | — | — | Local SQLite |
-| `team_awareness.py` | Google/Nextcloud API (reads shared calendars) | — | Opt-in team features |
-| `llm_rater.py` | LLM API (local Ollama default, cloud opt-in) | — | Rating endpoint |
-| `cal_backend.py` | Google/Nextcloud API | — | Calendar abstraction layer |
-| `setup.sh` | Google OAuth, Nextcloud | `uv pip install` (pip3 fallback) | One-time setup; does NOT contact clawhub.ai |
-| `install_daemon.sh` | — | `launchctl`/`systemctl` | One-time daemon install |
-| `optional/setup_clawhub_oauth.sh` | clawhub.ai (opt-in only) | — | Optional: fetch OAuth client from clawhub; not called by setup.sh |
-| **`decay.py`** 🆕 | — | — | Pure math library |
-| **`proactivity_engine.py`** 🆕 | — | — | Local SQLite scoring |
-| **`interrupt_controller.py`** 🆕 | — | — | Local SQLite nudge filter |
-| **`explain.py`** 🆕 | — | — | Local SQLite trace |
-| **`health_check.py`** 🆕 | Calendar API (connectivity check) | `launchctl`/`systemctl` (daemon check) | Diagnostic tool |
-| **`policy_conflict_detector.py`** 🆕 | — | — | Local SQLite |
-| **`config_wizard.py`** 🆕 | — | — | Interactive CLI, writes config.json |
-| **`export_data.py`** 🆕 | — | — | Local file I/O |
-| **`behaviour_report.py`** 🆕 | — | — | Local SQLite |
-| **`link_store.py`** 🆕 | — | — | Local SQLite (proactive_links.db) |
-| **`action_codec.py`** 🆕 | — | — | Pure string encoding |
-| **`action_planner.py`** 🆕 | Via scan_calendar (Google/Nextcloud API) | — | PLAN phase |
-| **`action_executor.py`** 🆕 | Via daemon send_notification (system/Telegram) | — | EXECUTE phase |
-| **`confirm_delete.py`** 🆕 | — | — | Local SQLite |
-| **`action_cleanup.py`** 🆕 | Via cal_backend (Google/Nextcloud API) | — | Calendar event rename/delete |
-
----
-
-## 🗃️ SQLite Tables
-
-### memory.db
-
-| Table | Purpose |
-|-------|---------|
-| `outcomes` | Event outcomes with sentiment, action items, notes |
-| `rules` | User-defined natural language rules |
-| `policies` | Calendar automation policies |
-| `contacts` | Relationship memory CRM |
-| `notification_log` | Adaptive notification tracking |
-| `energy_scores` | Energy prediction data |
-| `proactivity_scores` | Unified proactivity scoring (v1.2.0) |
-| `nudge_log` | Interruption governance tracking (v1.2.0) |
-| `policy_conflicts` | Detected policy contradictions (v1.2.0) |
-| `behaviour_snapshots` | Monthly drift monitoring data (v1.2.0) |
-
-### proactive_links.db *(new in v1.2.0)*
-
-| Table | Purpose |
-|-------|---------|
-| `user_events` | Tracked user events with fingerprint + missing_count |
-| `action_events` | Planned actions with type, status, due_ts |
-| `links` | User event ↔ action event connections |
-| `suppression` | Events user said "don't ask about" |
-| `sent_actions` | Idempotency log for action execution |
-
----
-
-## 📜 install_daemon.sh — Full Source
-
-This script does exactly **four things**:
-1. Detects macOS or Linux
-2. Writes a plist to `~/Library/LaunchAgents/` (macOS) or `.service` + `.timer` to `~/.config/systemd/user/` (Linux) — **user directory, not system**
-3. Registers the timer with `launchctl load` or `systemctl --user enable`
-4. Prints status and uninstall instructions
-
-**No `sudo`. No root. No downloads. No curl/wget. No network calls. Writes only to your home directory.**
-
-```bash
-#!/bin/bash
-# install_daemon.sh — Install proactive-claw as a background daemon
-# Supports: macOS (launchd) | Linux (systemd user service)
-# Run once after setup.sh
-
-set -e
-
-SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
-PYTHON=$(command -v python3)
-PLATFORM=$(uname -s)
-
-if [ "$PLATFORM" = "Darwin" ]; then
-  PLIST_DIR="$HOME/Library/LaunchAgents"
-  PLIST="$PLIST_DIR/ai.openclaw.proactive-claw.plist"
-  mkdir -p "$PLIST_DIR"
-  cat > "$PLIST" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>         <string>ai.openclaw.proactive-claw</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$PYTHON</string>
-    <string>$SKILL_DIR/scripts/daemon.py</string>
-  </array>
-  <key>StartInterval</key> <integer>900</integer>
-  <key>RunAtLoad</key>     <true/>
-  <key>StandardOutPath</key>  <string>$SKILL_DIR/daemon.log</string>
-  <key>StandardErrorPath</key><string>$SKILL_DIR/daemon.log</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>HOME</key> <string>$HOME</string>
-    <key>PATH</key> <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
-  </dict>
-  <key>WorkingDirectory</key> <string>$SKILL_DIR</string>
-</dict>
-</plist>
-EOF
-  launchctl unload "$PLIST" 2>/dev/null || true
-  launchctl load "$PLIST"
-
-elif [ "$PLATFORM" = "Linux" ]; then
-  SERVICE_DIR="$HOME/.config/systemd/user"
-  mkdir -p "$SERVICE_DIR"
-  cat > "$SERVICE_DIR/openclaw-proactive-claw.service" << EOF
-[Unit]
-Description=OpenClaw Proactive Agent
-After=network.target
-[Service]
-Type=oneshot
-ExecStart=$PYTHON $SKILL_DIR/scripts/daemon.py
-StandardOutput=append:$SKILL_DIR/daemon.log
-StandardError=append:$SKILL_DIR/daemon.log
-Environment=HOME=$HOME
-EOF
-  cat > "$SERVICE_DIR/openclaw-proactive-claw.timer" << EOF
-[Unit]
-Description=Run OpenClaw Proactive Agent every 15 minutes
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=15min
-Unit=openclaw-proactive-claw.service
-[Install]
-WantedBy=timers.target
-EOF
-  systemctl --user daemon-reload
-  systemctl --user enable --now openclaw-proactive-claw.timer
-else
-  echo "Platform not supported. Run manually: python3 $SKILL_DIR/scripts/daemon.py --loop"
-fi
-```
-
----
-
-## 📦 setup.sh — What Each Step Does
-
-| Step | What it does | Network? |
-|------|-------------|----------|
-| 1 | Checks Python 3.8+ is installed | No |
-| 2 | Reads `calendar_backend` from config.json (defaults to `google`) | No |
-| 3 | Creates default `config.json` if it doesn't exist (all features OFF, daemon_enabled: false) | No |
-| 4 | Creates `outcomes/` directory | No |
-| Nextcloud path | `uv pip install caldav icalendar` (pip3 fallback); connects to Nextcloud; creates action calendar if missing | HTTPS to **your own Nextcloud only** |
-| Google path | `uv pip install google-api-python-client google-auth-oauthlib google-auth-httplib2` (pip3 fallback); OAuth flow; creates action calendar | HTTPS to **Google OAuth + Calendar API only** |
-
-**clawhub.ai is NOT contacted by setup.sh.** Use `scripts/optional/setup_clawhub_oauth.sh` separately only if desired.
-
-**No curl/wget. No arbitrary downloads. No root. No system file modifications. No data sent to skill author.**
-
----
-
-## 🎯 Tone & Interaction Rules
-
-- **One question at a time** — never stack asks
-- **Daemon nudges first** — check `pending_nudges.json` before starting new asks at conversation open
-- **Never repeat** the same event ask twice in one conversation
-- **Always confirm** before writing calendar events (title, date, friendly time + tz)
-- **Always confirm** before clearing or moving events — show what will change first
-- **Always confirm** before writing outcome notes (bullet summary)
-- **Respect "no"** — dismissed forever; "not now" snoozed
-- **Be brief** — check-in prompts ≤ 2 sentences; agenda is a starting point, not a report
-- **Surface, don't overwhelm** — multiple actionable items → highest-scored first
-- **Timezone-aware** — always display in user's `timezone` config, never UTC
-- **Privacy first** — team calendar features are opt-in, never auto-enroll anyone
-- **Never reveal the Action calendar** — it's internal; never tell users to look at it directly
-- **Respect autonomy cap** — if `max_autonomy_level` is `advisory`, never create events
-- **Respect quiet hours** — no non-safety nudges during configured quiet windows
+## To improve this 100×, here’s what would help:
+1) Your config key list (or config.example.json) so I can turn presets into copy/paste blocks safely.  
+2) Whether you want scores displayed as `0.92` or `92/100` (both numeric; one is friendlier).  
+3) If you want an “Advanced” section for autonomous mode or prefer to keep it out of the main doc.

@@ -39,40 +39,57 @@ sys.path.insert(0, str(SKILL_DIR / "scripts"))
 # Maps regex patterns to (script, flag_template) pairs.
 # {1}, {2} etc. are replaced with captured groups.
 
+# ── Intent routing table ──────────────────────────────────────────────────────
+# Maps regex patterns to (script, args_template) pairs.
+# args_template is a list of arguments. Placeholders {1}, {2} refer to regex
+# capture groups. {0} refers to the full (cleaned) command text.
+#
+# IMPORTANT: We never build a shell string. Untrusted text is passed as a single
+# argument where needed, and we reject suspicious metacharacters to reduce risk
+# of command/flag injection into downstream scripts.
+
 INTENTS = [
     # Calendar moves
-    (r"move (.+?) to (.+)", "cal_editor.py", "--move {1} {2}"),
-    (r"reschedule (.+?) (?:to|for) (.+)", "cal_editor.py", "--move {1} {2}"),
+    (r"move (.+?) to (.+)", "cal_editor.py", ["--move", "{1}", "{2}"]),
+    (r"reschedule (.+?) (?:to|for) (.+)", "cal_editor.py", ["--move", "{1}", "{2}"]),
+
     # Find free time
     (r"(?:find|show|when(?:'s| is)) (?:free|available)(?: time)?(?: (?:on|this|next) (.+))?",
-     "cal_editor.py", "--find-free {1}"),
-    (r"(?:any )?free time (?:on |this |next )?(.+)", "cal_editor.py", "--find-free {1}"),
+     "cal_editor.py", ["--find-free", "{1}"]),
+    (r"(?:any )?free time (?:on |this |next )?(.+)", "cal_editor.py", ["--find-free", "{1}"]),
+
     # Read calendar
     (r"(?:what(?:'s| is) on|read|show) (?:my )?(?:calendar )?(?:for )?(.+)",
-     "cal_editor.py", "--read {1}"),
-    (r"(?:what(?:'s| is) happening|any events?) (.+)", "cal_editor.py", "--read {1}"),
+     "cal_editor.py", ["--read", "{1}"]),
+    (r"(?:what(?:'s| is) happening|any events?) (.+)", "cal_editor.py", ["--read", "{1}"]),
+
     # Energy / focus
     (r"(?:when(?:'s| is| are) (?:my )?best (?:time|energy|focus)|suggest focus)",
-     "energy_predictor.py", "--suggest-focus-time"),
+     "energy_predictor.py", ["--suggest-focus-time"]),
     (r"(?:schedule|create|add|block) focus (?:blocks?|time)",
-     "energy_predictor.py", "--block-focus-week"),
-    (r"check (?:my )?energy (?:for )?(.+)", "energy_predictor.py", "--analyse"),
+     "energy_predictor.py", ["--block-focus-week"]),
+    (r"check (?:my )?energy (?:for )?(.+)", "energy_predictor.py", ["--analyse"]),
+
     # Conflicts
-    (r"(?:any )?conflicts?(?:.+)?", "conflict_detector.py", ""),
-    (r"fix (?:my )?(?:schedule|conflicts?)", "cal_editor.py", "--reschedule-conflict"),
+    (r"(?:any )?conflicts?(?:.+)?", "conflict_detector.py", []),
+    (r"fix (?:my )?(?:schedule|conflicts?)", "cal_editor.py", ["--reschedule-conflict"]),
+
     # Action items
-    (r"(?:open|show|list) action items?", "memory.py", "--open-actions"),
-    (r"(?:open|stale) actions?", "memory.py", "--open-actions"),
+    (r"(?:open|show|list) action items?", "memory.py", ["--open-actions"]),
+    (r"(?:open|stale) actions?", "memory.py", ["--open-actions"]),
+
     # Weekly digest
-    (r"(?:weekly )?digest|weekly summary|recap", "intelligence_loop.py", "--weekly-digest"),
+    (r"(?:weekly )?digest|weekly summary|recap", "intelligence_loop.py", ["--weekly-digest"]),
+
     # Contacts
-    (r"(?:tell me about|who is|look up|lookup) (.+)", "relationship_memory.py", "--lookup {1}"),
+    (r"(?:tell me about|who is|look up|lookup) (.+)", "relationship_memory.py", ["--lookup", "{1}"]),
     (r"(?:attendee brief|who(?:'s| is) (?:in|at|coming to)) (.+)",
-     "relationship_memory.py", "--brief {1}"),
-    (r"stale contacts?", "relationship_memory.py", "--stale"),
-    # Policy
+     "relationship_memory.py", ["--brief", "{1}"]),
+    (r"stale contacts?", "relationship_memory.py", ["--stale"]),
+
+    # Policy (pass whole command as ONE argument)
     (r"(?:always|never|suppress|boost|block|add buffer) .+",
-     "policy_engine.py", "--parse {0}"),
+     "policy_engine.py", ["--parse", "{0}"]),
 ]
 
 
@@ -238,59 +255,110 @@ def record_audio(seconds: int = 10) -> dict:
     }
 
 
+def _looks_suspicious(text: str) -> bool:
+    """
+    Conservative check to reduce risk of command/flag injection into downstream scripts.
+    We do NOT execute a shell, but we still reject common metacharacters that could
+    alter meaning if a downstream component ever mishandles arguments.
+    """
+    if not text:
+        return True
+    # reject control chars / newlines
+    if any(ord(c) < 32 for c in text):
+        return True
+    # reject obvious shell metacharacters
+    if re.search(r"[;&|`$<>\\]", text):
+        return True
+    return False
+
+
+def _fill_arg(template: str, groups: dict) -> str:
+    # Fill placeholders like "{1}", "{2}", "{0}".
+    out = template
+    for k, v in groups.items():
+        out = out.replace(f"{{{k}}}", v)
+    return out
+
+
 def route_command(text: str) -> dict:
     """
-    Match a transcribed command to a proactive-claw script and run it.
-    Returns the JSON result from the matched script.
+    Match a transcribed command to a proactive-claw script and run it safely.
+
+    Security notes:
+    - We never invoke a shell (shell=False).
+    - We never split untrusted text into flags.
+    - Captured text is passed as a single argument where applicable.
+    - We reject suspicious metacharacters to reduce risk of injection into downstream code.
     """
-    text_clean = text.strip().lower()
+    text_clean = text.strip()
+    if _looks_suspicious(text_clean):
+        return {
+            "status": "rejected",
+            "reason": "suspicious_input",
+            "message": "Command contained suspicious characters. Please rephrase without special symbols.",
+            "text": text,
+        }
+
+    text_clean = text_clean.lower()
     text_clean = re.sub(r"[.,!?;]$", "", text_clean).strip()
 
-    for pattern, script_name, flag_template in INTENTS:
+    for pattern, script_name, args_template in INTENTS:
         m = re.search(pattern, text_clean, re.IGNORECASE)
-        if m:
-            # Build flag string — replace {N} with group N, {0} with full match text
-            flags = flag_template
-            flags = flags.replace("{0}", text_clean)
-            for i, g in enumerate(m.groups(), start=1):
-                flags = flags.replace(f"{{{i}}}", g.strip() if g else "this week")
+        if not m:
+            continue
 
-            script_path = str(SKILL_DIR / "scripts" / script_name)
-            cmd = [sys.executable, script_path] + [f for f in flags.split() if f]
+        # Build placeholder map: {0} full text, {1..N} groups
+        groups = {"0": text_clean}
+        for i, g in enumerate(m.groups(), start=1):
+            val = (g or "").strip()
+            if not val:
+                val = "this week"
+            # Reject suspicious content in captured groups too
+            if _looks_suspicious(val):
+                return {
+                    "status": "rejected",
+                    "reason": "suspicious_capture",
+                    "message": "Captured phrase contained suspicious characters. Please rephrase.",
+                    "text": text,
+                }
+            groups[str(i)] = val
 
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                if result.returncode == 0:
-                    try:
-                        data = json.loads(result.stdout)
-                    except Exception:
-                        data = {"raw_output": result.stdout.strip()}
-                    return {
-                        "status": "ok",
-                        "intent_matched": pattern,
-                        "script": script_name,
-                        "command": " ".join(cmd[2:]),
-                        "result": data,
-                    }
-                else:
-                    return {
-                        "status": "script_error",
-                        "intent_matched": pattern,
-                        "script": script_name,
-                        "stderr": result.stderr.strip()[:500],
-                    }
-            except subprocess.TimeoutExpired:
-                return {"status": "timeout", "script": script_name}
-            except Exception as e:
-                return {"status": "error", "message": str(e)}
+        script_path = str(SKILL_DIR / "scripts" / script_name)
+
+        # Fill args template WITHOUT ever splitting user text
+        filled_args = [_fill_arg(a, groups) for a in args_template]
+        cmd = [sys.executable, script_path] + filled_args
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                try:
+                    data = json.loads(result.stdout)
+                except Exception:
+                    data = {"raw_output": result.stdout.strip()}
+                return {
+                    "status": "ok",
+                    "intent_matched": pattern,
+                    "script": script_name,
+                    "command": " ".join(filled_args),
+                    "result": data,
+                }
+            return {
+                "status": "script_error",
+                "intent_matched": pattern,
+                "script": script_name,
+                "stderr": result.stderr.strip()[:500],
+            }
+        except subprocess.TimeoutExpired:
+            return {"status": "timeout", "script": script_name}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     return {
         "status": "no_match",
         "message": f"Couldn't route: '{text}'. Try: 'move X to Y', 'show free time tomorrow', 'read calendar this week'.",
         "text": text,
     }
-
-
 def transcribe_and_route(audio_path: str) -> dict:
     """Full pipeline: transcribe audio then route command."""
     transcription = transcribe_audio(audio_path)

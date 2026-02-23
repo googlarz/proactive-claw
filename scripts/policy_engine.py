@@ -174,13 +174,13 @@ def evaluate_policies(policies: list, events: list, dry_run: bool = False,
     The optional config parameter enables max_autonomy_level enforcement:
     - advisory: never execute, return suggestion only
     - confirm: never execute, mark as needs_confirmation
-    - autonomous: execute as before (default)
+    - autonomous: execute as configured (explicit opt-in)
     """
     actions = []
     now = datetime.now(timezone.utc)
-    autonomy = "autonomous"
+    autonomy = "confirm"
     if config:
-        autonomy = config.get("max_autonomy_level", "autonomous")
+        autonomy = config.get("max_autonomy_level", "confirm")
 
     for event in events:
         score = event.get("score", 0)

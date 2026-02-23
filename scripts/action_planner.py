@@ -396,7 +396,7 @@ def plan(config: dict = None, dry_run: bool = False) -> dict:
                         )
                         desc = encode_action_description(a_title, payload)
 
-                        autonomy = config.get("max_autonomy_level", "autonomous")
+                        autonomy = config.get("max_autonomy_level", "confirm")
                         if autonomy == "advisory":
                             continue  # don't create action events in advisory mode
 
