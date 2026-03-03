@@ -3,7 +3,7 @@ name: Proactive Claw
 description: >
   🦞 The most powerful proactive engine for OpenClaw. Your personal assistant that learns from you and helps you be more productive.
 
-version: 1.2.32
+version: 1.2.33
 
 metadata:
   openclaw:

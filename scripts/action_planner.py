@@ -41,15 +41,19 @@ def load_config() -> dict:
         return {}
 
 
-def _iso_to_ts(iso_str: str) -> int:
-    """Convert ISO datetime string to Unix timestamp."""
+def _iso_to_ts(iso_str: str):
+    """Convert ISO datetime string to Unix timestamp. Returns None on failure."""
+    if not iso_str:
+        return None
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return int(dt.timestamp())
     except Exception:
-        return 0
+        import logging
+        logging.warning(f"_iso_to_ts: could not parse {iso_str!r} — skipping event")
+        return None
 
 
 def _ts_to_iso(ts: int) -> str:
@@ -127,6 +131,8 @@ def plan(config: dict = None, dry_run: bool = False) -> dict:
 
         start_ts = _iso_to_ts(start_raw)
         end_ts = _iso_to_ts(end_raw)
+        if start_ts is None or end_ts is None:
+            continue
         attendees = ",".join(
             a.get("email", "") for a in (event.get("attendees") or [])
         )
@@ -166,8 +172,9 @@ def plan(config: dict = None, dry_run: bool = False) -> dict:
                     continue
 
                 # Try title + near-time match
+                tolerance_sec = config.get("event_relink_tolerance_sec", 300)
                 title_matches = find_by_title_near(
-                    conn, row["title"], row["start_ts"], tolerance_sec=300
+                    conn, row["title"], row["start_ts"], tolerance_sec=tolerance_sec
                 )
                 if title_matches:
                     results["relinked"] += 1

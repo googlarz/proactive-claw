@@ -66,12 +66,42 @@ def load_state() -> dict:
 
 
 def save_state(state: dict):
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.replace(STATE_FILE)
+
+
+def _is_quiet_hours(config: dict) -> bool:
+    """Return True if the current local time falls within configured quiet hours."""
+    qh = config.get("quiet_hours", {})
+    if not qh:
+        return False
+    now = datetime.now()
+    is_weekend = now.weekday() >= 5
+    window_str = qh.get("weekends" if is_weekend else "weekdays", "")
+    if not window_str or "-" not in window_str:
+        return False
+    try:
+        start_str, end_str = window_str.split("-", 1)
+        start_h, start_m = map(int, start_str.split(":"))
+        end_h, end_m = map(int, end_str.split(":"))
+        now_minutes = now.hour * 60 + now.minute
+        start_minutes = start_h * 60 + start_m
+        end_minutes = end_h * 60 + end_m
+        if start_minutes > end_minutes:
+            # Overnight window e.g. 22:00-07:00
+            return now_minutes >= start_minutes or now_minutes < end_minutes
+        return start_minutes <= now_minutes < end_minutes
+    except Exception:
+        return False
 
 
 def send_notification(config: dict, message: str, event_id: str = "",
-                      channel_override: str = None):
+                      channel_override: str = None, critical: bool = False):
     """Send a notification via configured channel(s)."""
+    if not critical and _is_quiet_hours(config):
+        log(f"Quiet hours active — suppressed: {message[:60]}")
+        return False
     if channel_override:
         channels = [channel_override]
     else:
@@ -279,7 +309,7 @@ def tick(config: dict, state: dict) -> dict:
                 ckey = f"conflict_{conflict.get('key', '')}"
                 if ckey not in notified:
                     msg = conflict.get("message", "Calendar conflict detected.")
-                    send_notification(config, msg)
+                    send_notification(config, msg, critical=True)
                     notified[ckey] = now_iso
                     log(f"Conflict notified: {msg[:80]}")
         except Exception as e:
@@ -306,9 +336,12 @@ def tick(config: dict, state: dict) -> dict:
     state["last_plan_result"] = plan_result
     state["last_exec_result"] = exec_result
 
-    if len(notified) > 200:
-        keys = list(notified.keys())
-        state["notified_events"] = {k: notified[k] for k in keys[-200:]}
+    # Expire notified_events entries older than 48 hours
+    cutoff_iso = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+    state["notified_events"] = {
+        k: v for k, v in notified.items()
+        if isinstance(v, str) and v >= cutoff_iso
+    }
 
     return state
 

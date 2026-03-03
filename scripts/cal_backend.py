@@ -142,8 +142,9 @@ def _get_caldav_client(config: dict):
             "Nextcloud config incomplete. Set nextcloud.url, nextcloud.username, "
             "nextcloud.password in config.json"
         )
+    caldav_path = nc.get("caldav_path", "/remote.php/dav")
     client = caldav.DAVClient(
-        url=f"{url}/remote.php/dav",
+        url=f"{url}{caldav_path}",
         username=username,
         password=password,
     )
@@ -209,8 +210,14 @@ def nextcloud_list_events(config: dict, cal_url: str,
                 "attendees": attendees,
                 "_caldav_url": str(event.url),
             })
-        except Exception:
-            pass
+        except Exception as e:
+            uid_hint = ""
+            try:
+                uid_hint = str(event.vobject_instance.vevent.uid.value)
+            except Exception:
+                pass
+            import logging
+            logging.warning(f"CalDAV: skipped malformed event uid={uid_hint!r}: {e}")
     return result
 
 

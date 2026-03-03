@@ -26,6 +26,7 @@
   "watched_calendars": [],
   "ignored_calendars": [],
   "action_cleanup_days": 30,
+  "event_relink_tolerance_sec": 300,
   "notes_destination": "local",
   "notes_path": "~/.openclaw/workspace/skills/proactive-claw/outcomes/",
 
@@ -77,7 +78,8 @@
     "url": "",
     "username": "",
     "password": "",
-    "openclaw_calendar_url": ""
+    "openclaw_calendar_url": "",
+    "caldav_path": "/remote.php/dav"
   },
 
   "_llm_rater_comment": "Defaults to local Ollama — no API key needed, no data leaves machine.",
