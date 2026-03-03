@@ -39,7 +39,7 @@ All data stays on your machine. Nothing is uploaded to the skill author or any t
 | GitHub via `gh` CLI | `feature_cross_skill: true` + authenticated `gh` | Read-only: PR/issue list |
 | `https://api.openai.com` or other LLM | `feature_llm_rater: true` + cloud `base_url` | Meeting outcome notes + event title + sentiment |
 | Your Nextcloud host | `calendar_backend: nextcloud` | CalDAV read/write |
-| `https://clawhub.ai` | Only if you run `scripts/setup_clawhub_oauth.sh` manually | `clawhub_token` → receives `credentials.json` only |
+| `https://clawhub.ai` | Only if you run `scripts/optional/setup_clawhub_oauth.sh` manually | `clawhub_token` → receives `credentials.json` only (must match pinned `clawhub_credentials_sha256`) |
 
 ### Never contacted
 
@@ -70,9 +70,10 @@ https://www.googleapis.com/auth/calendar
 |--------|-------------|----------|-----------|
 | `scripts/setup.sh` | `pip3 install` from PyPI, OAuth flow, creates Actions calendar, writes `config.json` | Google OAuth + Calendar API, PyPI | User only, no sudo |
 | `scripts/install_daemon.sh` | Writes launchd plist (macOS) or systemd user timer (Linux) | None | User only, no sudo |
-| `scripts/setup_clawhub_oauth.sh` | Downloads `credentials.json` from clawhub.ai | clawhub.ai only | User only, no sudo |
+| `scripts/optional/setup_clawhub_oauth.sh` | Downloads `credentials.json` from clawhub.ai | clawhub.ai only | User only, no sudo |
 
-**`setup_clawhub_oauth.sh` is NOT called by `setup.sh`.** It is a separate, explicit opt-in.
+**`scripts/optional/setup_clawhub_oauth.sh` is NOT called by `setup.sh`.** It is a separate, explicit opt-in.
+It is also fail-closed: it requires both `clawhub_oauth_allow_remote_fetch=true` and a valid `clawhub_credentials_sha256` pin match.
 
 ---
 
@@ -141,7 +142,7 @@ python3 scripts/export_data.py --export --output ~/proactive-claw-backup --forma
 | OAuth token exfiltration | `token.json` stays local; never uploaded |
 | Unauthorized calendar writes | Write calls only target Actions calendar ID from `config.json`; code-level enforcement |
 | Background daemon persistence | User-level only; `daemon_enabled: false` kill switch; explicit uninstall script |
-| clawhub.ai credential brokering | `setup_clawhub_oauth.sh` is opt-in only, not called by `setup.sh`; fetches client definition only |
+| clawhub.ai credential brokering | `scripts/optional/setup_clawhub_oauth.sh` is opt-in only, not called by `setup.sh`; requires explicit allow flag and SHA-256 pin match before writing credentials |
 | Third-party data leakage | All external features default `false`; require explicit flag in `config.json` |
 | Privilege escalation | No sudo, no root, no system services |
 | Malicious package updates | Packages pinned to PyPI; no custom package indexes |

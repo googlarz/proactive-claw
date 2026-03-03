@@ -101,6 +101,8 @@ if [ ! -f "$CONFIG" ]; then
     "weekends": "21:00-09:00"
   },
   "clawhub_token": "",
+  "clawhub_oauth_allow_remote_fetch": false,
+  "clawhub_credentials_sha256": "",
   "nextcloud": {
     "url": "",
     "username": "",

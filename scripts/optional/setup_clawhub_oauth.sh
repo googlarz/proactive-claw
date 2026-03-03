@@ -30,12 +30,14 @@
 #
 # HOW TO OPT IN:
 #   1. Set clawhub_token in your config.json (from clawhub.ai/settings/integrations)
-#   2. Run: bash scripts/setup_clawhub_oauth.sh
-#   3. Then run: bash scripts/setup.sh (for the rest of setup)
+#   2. Set clawhub_oauth_allow_remote_fetch=true in config.json
+#   3. Set clawhub_credentials_sha256 in config.json (SHA-256 pin from trusted source)
+#   4. Run: bash scripts/optional/setup_clawhub_oauth.sh
+#   5. Then run: bash scripts/setup.sh (for the rest of setup)
 #
 # This script is NOT called by setup.sh. It is a separate, explicit opt-in.
 
-set -e
+set -euo pipefail
 
 SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
 CONFIG="$SKILL_DIR/config.json"
@@ -60,12 +62,18 @@ if [ -f "$CREDS" ]; then
 fi
 
 python3 - << 'PYEOF'
-import json, urllib.request, sys
+import hashlib
+import json
+import os
+import re
+import sys
+import urllib.request
 from pathlib import Path
 
 SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
 CONFIG_FILE = SKILL_DIR / "config.json"
 CREDS_FILE = SKILL_DIR / "credentials.json"
+MAX_RESPONSE_BYTES = 128 * 1024  # hard cap for safety
 
 with open(CONFIG_FILE) as f:
     config = json.load(f)
@@ -74,6 +82,19 @@ token = config.get("clawhub_token", "").strip()
 if not token:
     print("❌ clawhub_token not set in config.json")
     print("   Get your token at: https://clawhub.ai/settings/integrations")
+    sys.exit(1)
+
+allow_remote = bool(config.get("clawhub_oauth_allow_remote_fetch", False))
+if not allow_remote:
+    print("❌ Remote credential fetch is disabled by policy.")
+    print("   Set clawhub_oauth_allow_remote_fetch=true in config.json to opt in.")
+    sys.exit(1)
+
+expected_sha = str(config.get("clawhub_credentials_sha256", "")).strip().lower()
+if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+    print("❌ clawhub_credentials_sha256 is missing or invalid.")
+    print("   Set a 64-char lowercase hex SHA-256 pin in config.json.")
+    print("   Refusing to download unpinned remote credentials.")
     sys.exit(1)
 
 print(f"🌐 Contacting clawhub.ai to fetch Google OAuth client definition...")
@@ -86,15 +107,69 @@ try:
         "https://clawhub.ai/api/oauth/google-calendar-credentials",
         headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
     )
-    resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
-    creds_data = resp.get("credentials")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        cl = response.headers.get("Content-Length")
+        if cl and int(cl) > MAX_RESPONSE_BYTES:
+            print(f"❌ Response too large ({cl} bytes).")
+            sys.exit(1)
+        payload = response.read(MAX_RESPONSE_BYTES + 1)
+
+    if len(payload) > MAX_RESPONSE_BYTES:
+        print(f"❌ Response exceeds {MAX_RESPONSE_BYTES} byte safety limit.")
+        sys.exit(1)
+
+    resp = json.loads(payload.decode("utf-8"))
+    creds_data = resp.get("credentials") if isinstance(resp, dict) else None
     if not creds_data:
         print("❌ No credentials returned from clawhub.")
         print("   Connect Google Calendar at https://clawhub.ai/settings/integrations first.")
         sys.exit(1)
-    with open(CREDS_FILE, "w") as f:
+
+    # Strict shape checks: only expected OAuth client schema is accepted.
+    if not isinstance(creds_data, dict):
+        print("❌ Invalid credentials payload type.")
+        sys.exit(1)
+    top_keys = set(creds_data.keys())
+    if top_keys != {"installed"}:
+        print("❌ Invalid credentials payload shape: expected top-level key {'installed'}.")
+        sys.exit(1)
+    installed = creds_data.get("installed")
+    if not isinstance(installed, dict):
+        print("❌ Invalid credentials payload: 'installed' must be an object.")
+        sys.exit(1)
+    allowed_installed_keys = {
+        "client_id",
+        "project_id",
+        "auth_uri",
+        "token_uri",
+        "auth_provider_x509_cert_url",
+        "client_secret",
+        "redirect_uris",
+    }
+    unknown_keys = sorted(set(installed.keys()) - allowed_installed_keys)
+    if unknown_keys:
+        print(f"❌ Invalid credentials payload: unexpected keys in 'installed': {unknown_keys}")
+        sys.exit(1)
+    if not isinstance(installed.get("redirect_uris"), list):
+        print("❌ Invalid credentials payload: redirect_uris must be a list.")
+        sys.exit(1)
+
+    # Pin verification: canonical JSON hash must match config pin.
+    canonical = json.dumps(creds_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    actual_sha = hashlib.sha256(canonical).hexdigest()
+    if actual_sha != expected_sha:
+        print("❌ SHA-256 pin mismatch for downloaded credentials.")
+        print(f"   expected: {expected_sha}")
+        print(f"   actual:   {actual_sha}")
+        print("   Refusing to write credentials.json.")
+        sys.exit(1)
+
+    fd = os.open(str(CREDS_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump(creds_data, f, indent=2)
+
     print(f"✅ credentials.json downloaded to {CREDS_FILE}")
+    print(f"✅ SHA-256 verified: {actual_sha}")
     print()
     print("To verify the downloaded file contains only the OAuth client definition:")
     print(f"  cat {CREDS_FILE}")

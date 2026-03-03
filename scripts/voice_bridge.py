@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 if sys.version_info < (3, 8):
@@ -36,60 +37,55 @@ CONFIG_FILE = SKILL_DIR / "config.json"
 sys.path.insert(0, str(SKILL_DIR / "scripts"))
 
 # ── Intent routing table ──────────────────────────────────────────────────────
-# Maps regex patterns to (script, flag_template) pairs.
-# {1}, {2} etc. are replaced with captured groups.
-
-# ── Intent routing table ──────────────────────────────────────────────────────
-# Maps regex patterns to (script, args_template) pairs.
+# Maps regex patterns to (action_name, args_template) pairs.
 # args_template is a list of arguments. Placeholders {1}, {2} refer to regex
 # capture groups. {0} refers to the full (cleaned) command text.
 #
-# IMPORTANT: We never build a shell string. Untrusted text is passed as a single
-# argument where needed, and we reject suspicious metacharacters to reduce risk
-# of command/flag injection into downstream scripts.
+# IMPORTANT: We route to an explicit allowlist of local functions and avoid
+# spawning subprocesses for user-routed commands.
 
 INTENTS = [
     # Calendar moves
-    (r"move (.+?) to (.+)", "cal_editor.py", ["--move", "{1}", "{2}"]),
-    (r"reschedule (.+?) (?:to|for) (.+)", "cal_editor.py", ["--move", "{1}", "{2}"]),
+    (r"move (.+?) to (.+)", "cal_editor.move_event", ["{1}", "{2}"]),
+    (r"reschedule (.+?) (?:to|for) (.+)", "cal_editor.move_event", ["{1}", "{2}"]),
 
     # Find free time
     (r"(?:find|show|when(?:'s| is)) (?:free|available)(?: time)?(?: (?:on|this|next) (.+))?",
-     "cal_editor.py", ["--find-free", "{1}"]),
-    (r"(?:any )?free time (?:on |this |next )?(.+)", "cal_editor.py", ["--find-free", "{1}"]),
+     "cal_editor.find_free", ["{1}"]),
+    (r"(?:any )?free time (?:on |this |next )?(.+)", "cal_editor.find_free", ["{1}"]),
 
     # Read calendar
     (r"(?:what(?:'s| is) on|read|show) (?:my )?(?:calendar )?(?:for )?(.+)",
-     "cal_editor.py", ["--read", "{1}"]),
-    (r"(?:what(?:'s| is) happening|any events?) (.+)", "cal_editor.py", ["--read", "{1}"]),
+     "cal_editor.read", ["{1}"]),
+    (r"(?:what(?:'s| is) happening|any events?) (.+)", "cal_editor.read", ["{1}"]),
 
     # Energy / focus
     (r"(?:when(?:'s| is| are) (?:my )?best (?:time|energy|focus)|suggest focus)",
-     "energy_predictor.py", ["--suggest-focus-time"]),
+     "energy.suggest_focus", []),
     (r"(?:schedule|create|add|block) focus (?:blocks?|time)",
-     "energy_predictor.py", ["--block-focus-week"]),
-    (r"check (?:my )?energy (?:for )?(.+)", "energy_predictor.py", ["--analyse"]),
+     "energy.block_focus_week", []),
+    (r"check (?:my )?energy (?:for )?(.+)", "energy.analyse", []),
 
     # Conflicts
-    (r"(?:any )?conflicts?(?:.+)?", "conflict_detector.py", []),
-    (r"fix (?:my )?(?:schedule|conflicts?)", "cal_editor.py", ["--reschedule-conflict"]),
+    (r"(?:any )?conflicts?(?:.+)?", "conflict.detect", []),
+    (r"fix (?:my )?(?:schedule|conflicts?)", "cal_editor.reschedule_conflict", []),
 
     # Action items
-    (r"(?:open|show|list) action items?", "memory.py", ["--open-actions"]),
-    (r"(?:open|stale) actions?", "memory.py", ["--open-actions"]),
+    (r"(?:open|show|list) action items?", "memory.open_actions", []),
+    (r"(?:open|stale) actions?", "memory.open_actions", []),
 
     # Weekly digest
-    (r"(?:weekly )?digest|weekly summary|recap", "intelligence_loop.py", ["--weekly-digest"]),
+    (r"(?:weekly )?digest|weekly summary|recap", "intelligence.weekly_digest", []),
 
     # Contacts
-    (r"(?:tell me about|who is|look up|lookup) (.+)", "relationship_memory.py", ["--lookup", "{1}"]),
+    (r"(?:tell me about|who is|look up|lookup) (.+)", "relationship.lookup", ["{1}"]),
     (r"(?:attendee brief|who(?:'s| is) (?:in|at|coming to)) (.+)",
-     "relationship_memory.py", ["--brief", "{1}"]),
-    (r"stale contacts?", "relationship_memory.py", ["--stale"]),
+     "relationship.brief", ["{1}"]),
+    (r"stale contacts?", "relationship.stale", []),
 
     # Policy (pass whole command as ONE argument)
     (r"(?:always|never|suppress|boost|block|add buffer) .+",
-     "policy_engine.py", ["--parse", "{0}"]),
+     "policy.add", ["{0}"]),
 ]
 
 
@@ -255,19 +251,25 @@ def record_audio(seconds: int = 10) -> dict:
     }
 
 
-def _looks_suspicious(text: str) -> bool:
+def _looks_suspicious(text: str, *, block_flag_tokens: bool = False) -> bool:
     """
-    Conservative check to reduce risk of command/flag injection into downstream scripts.
-    We do NOT execute a shell, but we still reject common metacharacters that could
-    alter meaning if a downstream component ever mishandles arguments.
+    Conservative validation to reduce the risk of command/flag injection.
+
+    We do not execute a shell, but we still reject common metacharacters and
+    optionally reject CLI-like flag tokens in captured phrases.
     """
     if not text:
+        return True
+    if len(text) > 500:
         return True
     # reject control chars / newlines
     if any(ord(c) < 32 for c in text):
         return True
     # reject obvious shell metacharacters
     if re.search(r"[;&|`$<>\\]", text):
+        return True
+    # optionally reject option-like tokens such as "--dry-run"
+    if block_flag_tokens and re.search(r"(^|\s)-{1,2}[A-Za-z0-9_]", text):
         return True
     return False
 
@@ -280,15 +282,133 @@ def _fill_arg(template: str, groups: dict) -> str:
     return out
 
 
+def _run_conflict_detection() -> dict:
+    import conflict_detector
+    import scan_calendar
+
+    events = scan_calendar.scan_user_events(config=scan_calendar.load_config())
+    now = datetime.now(timezone.utc)
+    future_events = []
+
+    for e in events:
+        start_info = e.get("start") or {}
+        start_raw = start_info.get("dateTime") or start_info.get("date", "")
+        try:
+            if "T" in start_raw:
+                s = conflict_detector.parse_dt(start_raw)
+                if s > now:
+                    future_events.append(e)
+            else:
+                future_events.append(e)
+        except Exception:
+            future_events.append(e)
+
+    overlaps = conflict_detector.detect_overlaps(future_events)
+    overloaded = conflict_detector.detect_overloaded_days(future_events, threshold=4)
+    back_to_back = conflict_detector.detect_back_to_back(future_events, gap_minutes=10)
+    all_conflicts = overlaps + overloaded + back_to_back
+
+    return {
+        "total_conflicts": len(all_conflicts),
+        "overlaps": len(overlaps),
+        "overloaded_days": len(overloaded),
+        "back_to_back_runs": len(back_to_back),
+        "conflicts": all_conflicts,
+    }
+
+
+def _dispatch_action(action_name: str, args: list[str]) -> dict:
+    if action_name == "cal_editor.move_event":
+        import cal_editor
+        return cal_editor.move_event(args[0], args[1])
+
+    if action_name == "cal_editor.find_free":
+        import cal_editor
+        return cal_editor.find_free_slots(args[0], 60)
+
+    if action_name == "cal_editor.read":
+        import cal_editor
+        return cal_editor.read_calendar(args[0])
+
+    if action_name == "cal_editor.reschedule_conflict":
+        import cal_editor
+        return cal_editor.reschedule_conflict()
+
+    if action_name in ("energy.suggest_focus", "energy.block_focus_week", "energy.analyse"):
+        from memory import get_db
+        import energy_predictor
+        conn = get_db()
+        try:
+            if action_name == "energy.suggest_focus":
+                return energy_predictor.suggest_focus_blocks(conn)
+            if action_name == "energy.block_focus_week":
+                return energy_predictor.create_focus_blocks(conn)
+            return energy_predictor.analyse_energy(conn)
+        finally:
+            conn.close()
+
+    if action_name == "conflict.detect":
+        return _run_conflict_detection()
+
+    if action_name == "memory.open_actions":
+        from memory import get_db, get_open_actions
+        conn = get_db()
+        try:
+            open_actions = get_open_actions(conn)
+            return {"open_actions": open_actions, "count": len(open_actions)}
+        finally:
+            conn.close()
+
+    if action_name == "intelligence.weekly_digest":
+        from memory import get_db
+        import intelligence_loop
+        conn = get_db()
+        try:
+            return intelligence_loop.weekly_digest(conn, intelligence_loop.load_config())
+        finally:
+            conn.close()
+
+    if action_name in ("relationship.lookup", "relationship.brief", "relationship.stale"):
+        import relationship_memory
+        conn = relationship_memory.get_db()
+        try:
+            if action_name == "relationship.lookup":
+                return relationship_memory.lookup_contact(conn, args[0])
+            if action_name == "relationship.brief":
+                return relationship_memory.brief_for_event(conn, args[0])
+            return relationship_memory.find_stale_contacts(conn, 30)
+        finally:
+            conn.close()
+
+    if action_name == "policy.add":
+        import policy_engine
+        conn = policy_engine.get_db()
+        try:
+            policy_text = args[0]
+            parsed = policy_engine.parse_policy(policy_text)
+            if not parsed.get("parsed"):
+                return parsed
+            policy_id = policy_engine.save_policy(conn, policy_text, parsed["policy_json"])
+            return {
+                "status": "saved",
+                "policy_id": policy_id,
+                "description": parsed.get("description", ""),
+                "mode": "autonomous" if parsed.get("autonomous") else "requires confirmation",
+            }
+        finally:
+            conn.close()
+
+    raise ValueError(f"Unknown action: {action_name}")
+
+
 def route_command(text: str) -> dict:
     """
     Match a transcribed command to a proactive-claw script and run it safely.
 
     Security notes:
-    - We never invoke a shell (shell=False).
-    - We never split untrusted text into flags.
-    - Captured text is passed as a single argument where applicable.
-    - We reject suspicious metacharacters to reduce risk of injection into downstream code.
+    - We route only to a fixed allowlist of local functions.
+    - We do not spawn subprocesses for user-routed intents.
+    - Captured text is validated and treated as data only.
     """
     text_clean = text.strip()
     if _looks_suspicious(text_clean):
@@ -302,7 +422,7 @@ def route_command(text: str) -> dict:
     text_clean = text_clean.lower()
     text_clean = re.sub(r"[.,!?;]$", "", text_clean).strip()
 
-    for pattern, script_name, args_template in INTENTS:
+    for pattern, action_name, args_template in INTENTS:
         m = re.search(pattern, text_clean, re.IGNORECASE)
         if not m:
             continue
@@ -313,8 +433,9 @@ def route_command(text: str) -> dict:
             val = (g or "").strip()
             if not val:
                 val = "this week"
-            # Reject suspicious content in captured groups too
-            if _looks_suspicious(val):
+            # Reject suspicious content in captured groups too.
+            # Captures should not include flag-like tokens (e.g. "--dry-run").
+            if _looks_suspicious(val, block_flag_tokens=True):
                 return {
                     "status": "rejected",
                     "reason": "suspicious_capture",
@@ -323,42 +444,33 @@ def route_command(text: str) -> dict:
                 }
             groups[str(i)] = val
 
-        script_path = str(SKILL_DIR / "scripts" / script_name)
-
-        # Fill args template WITHOUT ever splitting user text
+        # Fill args template WITHOUT ever splitting user text.
         filled_args = [_fill_arg(a, groups) for a in args_template]
-        cmd = [sys.executable, script_path] + filled_args
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode == 0:
-                try:
-                    data = json.loads(result.stdout)
-                except Exception:
-                    data = {"raw_output": result.stdout.strip()}
-                return {
-                    "status": "ok",
-                    "intent_matched": pattern,
-                    "script": script_name,
-                    "command": " ".join(filled_args),
-                    "result": data,
-                }
+            data = _dispatch_action(action_name, filled_args)
+            return {
+                "status": "ok",
+                "intent_matched": pattern,
+                "action": action_name,
+                "args": filled_args,
+                "result": data,
+            }
+        except Exception as e:
             return {
                 "status": "script_error",
                 "intent_matched": pattern,
-                "script": script_name,
-                "stderr": result.stderr.strip()[:500],
+                "action": action_name,
+                "stderr": str(e)[:500],
             }
-        except subprocess.TimeoutExpired:
-            return {"status": "timeout", "script": script_name}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
 
     return {
         "status": "no_match",
         "message": f"Couldn't route: '{text}'. Try: 'move X to Y', 'show free time tomorrow', 'read calendar this week'.",
         "text": text,
     }
+
+
 def transcribe_and_route(audio_path: str) -> dict:
     """Full pipeline: transcribe audio then route command."""
     transcription = transcribe_audio(audio_path)

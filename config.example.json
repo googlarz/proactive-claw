@@ -70,8 +70,10 @@
     "chat_id": ""
   },
 
-  "_clawhub_comment": "Optional: set clawhub_token to auto-download credentials.json via clawhub OAuth during setup.",
+  "_clawhub_comment": "Optional: remote credentials bootstrap from clawhub.ai (off by default). Requires token + explicit allow flag + SHA-256 pin.",
   "clawhub_token": "",
+  "clawhub_oauth_allow_remote_fetch": false,
+  "clawhub_credentials_sha256": "",
 
   "_nextcloud_comment": "Only used if calendar_backend = 'nextcloud'. Use an app-specific password.",
   "nextcloud": {

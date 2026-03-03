@@ -1,3 +1,15 @@
+## 1.2.35
+- Security: hardened `scripts/optional/setup_clawhub_oauth.sh` to fail closed by default.
+- Security: remote credential bootstrap now requires explicit opt-in (`clawhub_oauth_allow_remote_fetch=true`) and a valid pinned `clawhub_credentials_sha256` match before writing `credentials.json`.
+- Security: added strict payload shape checks and response size limits for clawhub OAuth credential fetch.
+- Security: `credentials.json` is written with restrictive file permissions (`0600`).
+- Docs/Config: updated `config.example.json`, `scripts/setup.sh`, and `SECURITY.md` to reflect the SHA-256 pin workflow and correct optional script path.
+
+## 1.2.34
+- Security: voice command routing now uses an explicit in-process allowlist dispatcher for user intents, removing subprocess execution for routed commands.
+- Security: stricter input validation rejects flag-like capture tokens (for example `--dry-run`) to reduce argument-injection risk.
+- Fix: policy voice intents now call policy parsing/storage directly in-process.
+
 ## 1.2.33
 - Bug: `_iso_to_ts()` returned 0 on parse failure — action events no longer fire at Unix epoch; events with unparseable times are skipped with a warning log.
 - Bug: Quiet hours (configured in `config.json`) now enforced in daemon — non-critical notifications are suppressed during configured windows. Conflict alerts remain critical and are always delivered.
