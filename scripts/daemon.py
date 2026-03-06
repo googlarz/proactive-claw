@@ -129,9 +129,6 @@ def send_notification(config: dict, message: str, event_id: str = "",
                 })
                 nudges_file.write_text(json.dumps(nudges, indent=2))
                 sent = True
-            elif channel == "telegram":
-                _notify_telegram(config, message)
-                sent = True
         except Exception as e:
             log(f"Notification channel '{channel}' failed: {e}")
 
@@ -163,22 +160,6 @@ def _notify_system(message: str):
         subprocess.run(["notify-send", "\U0001f99e Proactive Claw", message], check=True, capture_output=True)
     else:
         log(f"System notify not supported on {platform}: {message}")
-
-
-def _notify_telegram(config: dict, message: str):
-    import urllib.request
-    tg = config.get("telegram", {})
-    token = tg.get("bot_token", "") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    chat_id = tg.get("chat_id", "") or os.environ.get("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
-        raise ValueError("telegram.bot_token and telegram.chat_id required in config.json")
-    payload = json.dumps({"chat_id": chat_id, "text": f"\U0001f99e {message}", "parse_mode": "Markdown"}).encode()
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data=payload,
-        headers={"Content-Type": "application/json"}
-    )
-    urllib.request.urlopen(req, timeout=10)
 
 
 def run_scan() -> dict:

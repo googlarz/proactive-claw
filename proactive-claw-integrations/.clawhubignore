@@ -1,0 +1,12 @@
+# Runtime files
+token.json
+credentials.json
+config.json
+memory.db
+*.pyc
+__pycache__/
+.DS_Store
+
+# VCS
+.git/
+.github/

@@ -1,3 +1,10 @@
+## 1.2.37
+- Split release model: core bundle is now integration-free by default; third-party/network-heavy helpers moved to the separate `proactive-claw-integrations` add-on.
+- Core bundle exclusions: `cross_skill.py`, `team_awareness.py`, `install_daemon.sh`, and `optional/setup_clawhub_oauth.sh` are no longer published in core.
+- Privacy hardening: removed Notion outcome upload path from `capture_outcome.py`.
+- Core notifications are local-only (`openclaw`, `system`) in shipped defaults.
+- Docs/config updated to reflect core vs integrations split.
+
 ## 1.2.36
 - Security/Privacy: `llm_rater.py` is now local-only. Non-local LLM base URLs are hard-blocked (`localhost` / `127.0.0.1` / `::1` only).
 - Security/Privacy: removed cloud LLM backend presets and cloud endpoint references from shipped config/docs.

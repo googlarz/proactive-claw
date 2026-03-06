@@ -3,7 +3,7 @@ name: Proactive Claw
 description: >
   🦞 The most powerful proactive engine for OpenClaw. Your personal assistant that learns from you and helps you be more productive.
 
-version: 1.2.36
+version: 1.2.37
 
 metadata:
   openclaw:
@@ -29,7 +29,7 @@ It helps you be more productive by making smart suggestions at the right moment 
 
 ✅ Asks before applying changes (default)  
 ✅ Writes only what you approve (no surprise calendar edits)  
-✅ Optional daemon (off by default)  
+✅ Local-first core bundle (no external integration helpers)  
 ✅ Everything can run locally (small/local scoring model recommended)  
 ✅ Local state folder is transparent and deletable  
 
@@ -96,7 +96,7 @@ python3 scripts/daemon.py
 ## Modes (choose your vibe)
 
 - **Suggest (default):** asks before applying changes (`max_autonomy_level=confirm`)
-- **Background suggestions:** optional daemon, still asks for approval
+- **Background suggestions:** available via separate `proactive-claw-integrations` add-on
 - **Autonomous (advanced):** explicit opt-in only (not recommended until you’ve used it for a while)
 
 ---
@@ -254,10 +254,9 @@ python3 scripts/config_wizard.py --defaults
 
 ---
 
-## 4) Optional background execution
-```bash
-bash scripts/install_daemon.sh
-```
+## 4) Optional integrations add-on
+Background daemon installers and third-party integration helpers are shipped in a
+separate add-on bundle: `proactive-claw-integrations`.
 
 ---
 
@@ -276,8 +275,8 @@ Yes — it can. The scoring model is recommended to be small/local. The calendar
 ### Can I use it without Google?
 Yes — use **Nextcloud (CalDAV)**.
 
-### What is the optional daemon?
-A user-level scheduler (no sudo) that runs periodically so Proactive Claw can suggest proactively. It is **off by default**.
+### Where are daemon/integration helpers?
+They are intentionally split out of core into `proactive-claw-integrations`.
 
 ### What does “learning” mean here?
 It learns your preferences from your approvals/edits over time: prep durations, preferred times, buffer sizes, meeting types that matter, and deep work rules.
@@ -290,7 +289,7 @@ A lightweight model that assigns numeric scores (e.g., 0.66, 0.92) to decide wha
 ## Troubleshooting (by symptom)
 
 - **“Too many prompts”** → use Calm mode; reject a few times; it will adapt  
-- **“Not proactive enough”** → enable daemon; increase sensitivity  
+- **“Not proactive enough”** → run periodic scans manually or install the integrations add-on  
 - **“Prep blocks are wrong length”** → edit them twice; it will converge  
 - **“OAuth issues”** → re-run setup; revoke token and re-auth if needed  
 
@@ -298,10 +297,9 @@ A lightweight model that assigns numeric scores (e.g., 0.66, 0.92) to decide wha
 
 ## Uninstall
 
-1) Remove daemon (if installed)  
-2) Delete:
+1) Delete:
 `~/.openclaw/workspace/skills/proactive-claw/`  
-3) Revoke Google OAuth access if you used Google:
+2) Revoke Google OAuth access if you used Google:
 myaccount.google.com/permissions
 
 ---
@@ -311,7 +309,7 @@ myaccount.google.com/permissions
 - **Prep block:** time reserved before an event to prepare  
 - **Buffer:** short gap that prevents schedule collisions  
 - **Deep work:** uninterrupted focus block  
-- **Daemon:** optional background scheduler (off by default)  
+- **Daemon:** moved to optional integrations add-on  
 - **Score:** 0–1 number indicating importance/urgency  
 
 ---

@@ -55,24 +55,11 @@
   "feature_policy_conflict_detection": false,
 
   "_external_features_comment": "These contact external services — all MUST be explicitly enabled.",
-  "feature_cross_skill": false,
   "feature_voice": false,
   "feature_llm_rater": false,
-  "feature_telegram_notifications": false,
 
-  "_notification_comment": "Notification channels. 'openclaw' and 'system' are local-only.",
+  "_notification_comment": "Notification channels are local-only in core.",
   "notification_channels": ["openclaw", "system"],
-
-  "_telegram_comment": "Only used if 'telegram' added to notification_channels.",
-  "telegram": {
-    "bot_token": "",
-    "chat_id": ""
-  },
-
-  "_clawhub_comment": "Optional: remote credentials bootstrap from clawhub.ai (off by default). Requires token + explicit allow flag + SHA-256 pin.",
-  "clawhub_token": "",
-  "clawhub_oauth_allow_remote_fetch": false,
-  "clawhub_credentials_sha256": "",
 
   "_nextcloud_comment": "Only used if calendar_backend = 'nextcloud'. Use an app-specific password.",
   "nextcloud": {

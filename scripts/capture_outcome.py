@@ -153,41 +153,6 @@ def main():
         except Exception as e:
             result["destinations"].append({"type": "apple-notes", "status": "error", "error": str(e)})
 
-    # Optional: Notion outcome logging.
-    # NETWORK CALL: POST https://api.notion.com/v1/pages
-    # Sends: NOTION_API_KEY (Bearer token) + event title, date, sentiment, notes text.
-    # Gated by: notes_destination="notion" in config.json AND both env vars set.
-    # NOTION_API_KEY: your Notion integration token (env var)
-    # NOTION_OUTCOMES_DB_ID: the database ID where outcomes are saved (env var)
-    elif destination == "notion":
-        notion_key = os.environ.get("NOTION_API_KEY")
-        notion_db = os.environ.get("NOTION_OUTCOMES_DB_ID")
-        if notion_key and notion_db:
-            try:
-                import urllib.request
-                payload = json.dumps({
-                    "parent": {"database_id": notion_db},
-                    "properties": {
-                        "Name": {"title": [{"text": {"content": args.event_title}}]},
-                        "Date": {"date": {"start": args.event_datetime[:10]}},
-                        "Sentiment": {"select": {"name": args.sentiment}},
-                        "Notes": {"rich_text": [{"text": {"content": args.notes}}]},
-                    }
-                }).encode()
-                req = urllib.request.Request(
-                    "https://api.notion.com/v1/pages",
-                    data=payload,
-                    headers={
-                        "Authorization": f"Bearer {notion_key}",
-                        "Content-Type": "application/json",
-                        "Notion-Version": "2022-06-28"
-                    }
-                )
-                urllib.request.urlopen(req)
-                result["destinations"].append({"type": "notion", "status": "created"})
-            except Exception as e:
-                result["destinations"].append({"type": "notion", "status": "error", "error": str(e)})
-
     result["outcome"] = outcome
     print(json.dumps(result, indent=2))
 

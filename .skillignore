@@ -22,3 +22,7 @@ config.txt
 
 # Excluded optional features for clean-scan core bundle
 scripts/team_awareness.py
+scripts/cross_skill.py
+scripts/install_daemon.sh
+scripts/optional/setup_clawhub_oauth.sh
+proactive-claw-integrations/

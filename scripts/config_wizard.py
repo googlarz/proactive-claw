@@ -69,12 +69,9 @@ DEFAULT_CONFIG = {
     "feature_behaviour_report": False,
     "feature_config_wizard": False,
     "feature_policy_conflict_detection": False,
-    "feature_cross_skill": False,
     "feature_voice": False,
     "feature_llm_rater": False,
     "notification_channels": ["openclaw", "system"],
-    "telegram": {"bot_token": "", "chat_id": ""},
-    "clawhub_token": "",
     "nextcloud": {"url": "", "username": "", "password": "", "openclaw_calendar_url": ""},
     "llm_rater": {
         "enabled": False,
@@ -173,14 +170,8 @@ def run_wizard() -> dict:
     print("\nNotification channels (comma-separated):")
     print("  openclaw — in-chat nudges (default)")
     print("  system   — desktop notifications (default)")
-    print("  telegram — Telegram bot messages")
     channels_str = _ask("Channels", "openclaw,system")
     config["notification_channels"] = [c.strip() for c in channels_str.split(",") if c.strip()]
-
-    if "telegram" in config["notification_channels"]:
-        token = _ask("Telegram bot token", "")
-        chat_id = _ask("Telegram chat ID", "")
-        config["telegram"] = {"bot_token": token, "chat_id": chat_id}
 
     # 7. Quiet hours
     use_quiet = _ask("Enable quiet hours?", "yes", ["yes", "no"])

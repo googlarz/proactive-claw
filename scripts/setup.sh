@@ -4,8 +4,6 @@
 #
 # SECURITY NOTE: This script does NOT contact any remote server by default.
 # - All packages are installed from PyPI via uv pip install (pip3 fallback).
-# - If you have set clawhub_token in config.json, run scripts/optional/setup_clawhub_oauth.sh
-#   separately (opt-in only) to fetch Google credentials via clawhub.ai.
 # - No curl/wget. No eval of remote code. No sudo. No root.
 
 set -e
@@ -35,13 +33,6 @@ if [ -f "$CONFIG" ]; then
   BACKEND=$(python3 -c "import json; d=json.load(open('$CONFIG')); print(d.get('calendar_backend','google'))" 2>/dev/null || echo "google")
 fi
 echo "📅 Calendar backend: $BACKEND"
-
-# ── clawhub OAuth is OPT-IN ONLY ──────────────────────────────────────────────
-# Remote credential provisioning is NOT part of the default flow.
-# If you want to use clawhub.ai to obtain your Google credentials.json,
-# run this separately AFTER reviewing it:
-#   bash scripts/optional/setup_clawhub_oauth.sh
-# This script does NOT contact clawhub.ai. All setup is local.
 
 # Initialize config.json if missing
 if [ ! -f "$CONFIG" ]; then
@@ -80,10 +71,8 @@ if [ ! -f "$CONFIG" ]; then
   "feature_behaviour_report": false,
   "feature_config_wizard": false,
   "feature_policy_conflict_detection": false,
-  "feature_cross_skill": false,
   "feature_voice": false,
   "feature_llm_rater": false,
-  "feature_telegram_notifications": false,
   "default_user_calendar": "",
   "timezone": "UTC",
   "user_email": "",
@@ -99,9 +88,6 @@ if [ ! -f "$CONFIG" ]; then
     "weekdays": "22:00-07:00",
     "weekends": "21:00-09:00"
   },
-  "clawhub_token": "",
-  "clawhub_oauth_allow_remote_fetch": false,
-  "clawhub_credentials_sha256": "",
   "nextcloud": {
     "url": "",
     "username": "",
