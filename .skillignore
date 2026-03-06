@@ -18,7 +18,6 @@ __pycache__/
 
 # Legacy / scratch files
 config.txt
-*.txt
 
 # Excluded optional features for clean-scan core bundle
 scripts/team_awareness.py

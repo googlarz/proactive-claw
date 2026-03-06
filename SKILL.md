@@ -3,7 +3,7 @@ name: Proactive Claw
 description: >
   🦞 The most powerful proactive engine for OpenClaw. Your personal assistant that learns from you and helps you be more productive.
 
-version: 1.2.40
+version: 1.2.41
 
 metadata:
   openclaw:
@@ -12,7 +12,7 @@ metadata:
       config: [credentials.json, config.json]
     install:
       - kind: shell
-        label: "Run scripts/setup.sh to validate dependencies and configure Google OAuth or Nextcloud CalDAV"
+        label: "Run scripts/setup.sh --doctor, install required deps manually, then run scripts/setup.sh"
 ---
 
 # 🦞 Proactive Claw
@@ -76,17 +76,28 @@ In short: it becomes your personal assistant.
 
 ## Quick start (2 minutes)
 
-1) Install + bootstrap:
+1) Run readiness checks:
+```bash
+bash scripts/setup.sh --doctor
+```
+
+2) If dependencies are missing, print one install command:
+```bash
+bash scripts/setup.sh --print-install-cmd google
+# or: bash scripts/setup.sh --print-install-cmd nextcloud
+```
+
+3) Bootstrap calendar connection:
 ```bash
 bash scripts/setup.sh
 ```
 
-2) Run a safe preview:
+4) Run a safe preview:
 ```bash
-python3 scripts/daemon.py --simulate
+bash scripts/quickstart.sh
 ```
 
-3) Approve a suggestion in chat, then run once:
+5) Approve a suggestion in chat, then run once:
 ```bash
 python3 scripts/daemon.py
 ```
@@ -96,7 +107,7 @@ python3 scripts/daemon.py
 ## Modes (choose your vibe)
 
 - **Suggest (default):** asks before applying changes (`max_autonomy_level=confirm`)
-- **Background suggestions:** available via separate `proactive-claw-integrations` add-on
+- **Background (manual):** run local daemon yourself (`python3 scripts/daemon.py --loop`)
 - **Autonomous (advanced):** explicit opt-in only (not recommended until you’ve used it for a while)
 
 ---
@@ -217,8 +228,11 @@ TECHNICAL ARCHITECTURE (backend = Google OR Nextcloud)
 
 ---
 
-## 1) Install dependencies + bootstrap config
+## 1) Validate dependencies + bootstrap config
 ```bash
+bash scripts/setup.sh --doctor
+bash scripts/setup.sh --print-install-cmd google
+# install dependencies manually
 bash scripts/setup.sh
 ```
 
@@ -254,9 +268,10 @@ python3 scripts/config_wizard.py --defaults
 
 ---
 
-## 4) Optional integrations add-on
-Background daemon installers and third-party integration helpers are shipped in a
-separate add-on bundle: `proactive-claw-integrations`.
+## 4) Core boundaries (this package)
+- Includes: `scripts/daemon.py` for manual local runs.
+- Excludes from published bundle: cross-skill connectors, team awareness, daemon installers, optional remote OAuth bootstrap, voice bridge, and llm rater.
+- No background installer is shipped in this package.
 
 ---
 
@@ -275,8 +290,8 @@ Yes — it can. The scoring model is recommended to be small/local. The calendar
 ### Can I use it without Google?
 Yes — use **Nextcloud (CalDAV)**.
 
-### Where are daemon/integration helpers?
-They are intentionally split out of core into `proactive-claw-integrations`.
+### Does core include daemon installer helpers?
+No. Core includes `scripts/daemon.py` for manual runs. No launchd/systemd installer is published in this package.
 
 ### What does “learning” mean here?
 It learns your preferences from your approvals/edits over time: prep durations, preferred times, buffer sizes, meeting types that matter, and deep work rules.
@@ -289,7 +304,7 @@ A lightweight model that assigns numeric scores (e.g., 0.66, 0.92) to decide wha
 ## Troubleshooting (by symptom)
 
 - **“Too many prompts”** → use Calm mode; reject a few times; it will adapt  
-- **“Not proactive enough”** → run periodic scans manually or install the integrations add-on  
+- **“Not proactive enough”** → run `python3 scripts/daemon.py --loop` for continuous local scanning  
 - **“Prep blocks are wrong length”** → edit them twice; it will converge  
 - **“OAuth issues”** → re-run setup; revoke token and re-auth if needed  
 
@@ -309,7 +324,7 @@ myaccount.google.com/permissions
 - **Prep block:** time reserved before an event to prepare  
 - **Buffer:** short gap that prevents schedule collisions  
 - **Deep work:** uninterrupted focus block  
-- **Daemon:** moved to optional integrations add-on  
+- **Daemon:** background loop process (`python3 scripts/daemon.py --loop`)  
 - **Score:** 0–1 number indicating importance/urgency  
 
 ---

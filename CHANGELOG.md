@@ -1,3 +1,10 @@
+## 1.2.41
+- Convenience: `scripts/setup.sh` now supports `--doctor` (readiness checks) and `--print-install-cmd google|nextcloud` (single copy-paste install command).
+- Convenience: added `scripts/quickstart.sh` for a local-safe first run flow (doctor, safe defaults, daemon simulation).
+- Trust: added pinned dependency files `requirements-google.txt` and `requirements-nextcloud.txt`.
+- Docs: updated `SKILL.md` and `SECURITY.md` to describe literal core behavior (manual daemon only, no daemon installer in core package).
+- Ops: added `RELEASE_CHECKLIST.md` with artifact preview, exclusion verification, validation, and publish commands.
+
 ## 1.2.40
 - Release increment after 1.2.39 publish collision; core hardening profile remains unchanged.
 

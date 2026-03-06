@@ -7,39 +7,85 @@
 # - This script does NOT auto-install Python packages.
 # - If required libraries are missing, it prints explicit install commands and exits.
 
-set -e
+set -euo pipefail
 
 SKILL_DIR="$HOME/.openclaw/workspace/skills/proactive-claw"
 CONFIG="$SKILL_DIR/config.json"
 CREDS="$SKILL_DIR/credentials.json"
 
-echo "🦞 Proactive Claw Setup"
-echo "========================"
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash scripts/setup.sh
+  bash scripts/setup.sh --doctor
+  bash scripts/setup.sh --print-install-cmd google|nextcloud
 
-# Check Python 3.8+
-if ! command -v python3 &>/dev/null; then
-  echo "❌ Python 3 not found. Please install Python 3.8+ first."
-  exit 1
-fi
-PYTHON_VER=$(python3 -c "import sys; print(sys.version_info >= (3,8))")
-if [ "$PYTHON_VER" != "True" ]; then
-  echo "❌ Python 3.8+ required."
-  exit 1
-fi
-echo "✅ Python 3 found"
+Modes:
+  default                 Validate deps + run backend setup (OAuth/CalDAV)
+  --doctor                Run local readiness checks only (no network writes)
+  --print-install-cmd X   Print one install command for backend X
+USAGE
+}
 
-# Detect backend from config
-BACKEND="google"
-if [ -f "$CONFIG" ]; then
-  BACKEND=$(python3 -c "import json; d=json.load(open('$CONFIG')); print(d.get('calendar_backend','google'))" 2>/dev/null || echo "google")
-fi
-echo "📅 Calendar backend: $BACKEND"
+print_install_cmd() {
+  local backend="${1:-}"
+  case "$backend" in
+    google)
+      echo "python3 -m pip install -r \"$SKILL_DIR/requirements-google.txt\""
+      ;;
+    nextcloud)
+      echo "python3 -m pip install -r \"$SKILL_DIR/requirements-nextcloud.txt\""
+      ;;
+    *)
+      echo "Unknown backend: $backend" >&2
+      return 1
+      ;;
+  esac
+}
 
-# Initialize config.json if missing
-if [ ! -f "$CONFIG" ]; then
-  echo ""
-  echo "📝 Creating default config.json (safe defaults — all features OFF)..."
-  cat > "$CONFIG" << 'EOF'
+ensure_python() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: Python 3 not found. Install Python 3.8+ first."
+    return 1
+  fi
+  if ! python3 - <<'PYEOF'
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 8) else 1)
+PYEOF
+  then
+    echo "ERROR: Python 3.8+ required."
+    return 1
+  fi
+  return 0
+}
+
+detect_backend() {
+  if [ -f "$CONFIG" ]; then
+    python3 - <<PYEOF
+import json
+from pathlib import Path
+p = Path("$CONFIG")
+try:
+    d = json.loads(p.read_text())
+    b = str(d.get("calendar_backend", "google")).strip().lower()
+    print(b if b in ("google", "nextcloud") else "google")
+except Exception:
+    print("google")
+PYEOF
+  else
+    echo "google"
+  fi
+}
+
+ensure_config_exists() {
+  mkdir -p "$SKILL_DIR"
+  mkdir -p "$SKILL_DIR/outcomes"
+  if [ -f "$CONFIG" ]; then
+    return 0
+  fi
+
+  echo "Creating default config.json (safe defaults — all features OFF)..."
+  cat > "$CONFIG" << 'JSONEOF'
 {
   "calendar_backend": "google",
   "max_autonomy_level": "confirm",
@@ -91,43 +137,141 @@ if [ ! -f "$CONFIG" ]; then
     "url": "",
     "username": "",
     "password": "",
-    "openclaw_calendar_url": ""
+    "openclaw_calendar_url": "",
+    "caldav_path": "/remote.php/dav"
   }
 }
-EOF
-  echo "✅ config.json created with safe defaults (all features OFF, max_autonomy_level: confirm)"
-  echo "   → Edit config.json to set your timezone and user_email before continuing."
-fi
+JSONEOF
+  echo "config.json created at $CONFIG"
+}
 
-mkdir -p "$SKILL_DIR/outcomes"
-
-if [ "$BACKEND" = "nextcloud" ]; then
-  echo ""
-  echo "🔎 Checking Nextcloud dependencies..."
-  if ! python3 - << 'PYEOF'
-import importlib.util, sys
-missing = [m for m in ("caldav", "icalendar") if importlib.util.find_spec(m) is None]
-if missing:
-    print("missing:" + ",".join(missing))
-    sys.exit(1)
+check_google_deps() {
+  if python3 - <<'PYEOF'
+import importlib.util
+mods = ["google.oauth2", "google_auth_oauthlib.flow", "googleapiclient.discovery"]
+missing = []
+for m in mods:
+    try:
+        if importlib.util.find_spec(m) is None:
+            missing.append(m)
+    except Exception:
+        missing.append(m)
+raise SystemExit(1 if missing else 0)
 PYEOF
   then
-    echo "❌ Missing Python packages for Nextcloud backend."
-    echo "   Install one of:"
-    echo "   - uv pip install caldav icalendar"
-    echo "   - pip3 install caldav icalendar"
-    exit 1
+    echo "Google dependencies: OK"
+    return 0
   fi
-  echo "✅ Nextcloud dependencies present (caldav, icalendar)"
+  echo "Google dependencies: MISSING"
+  echo "Install with:"
+  print_install_cmd google
+  return 1
+}
+
+check_nextcloud_deps() {
+  if python3 - <<'PYEOF'
+import importlib.util
+mods = ["caldav", "icalendar"]
+missing = []
+for m in mods:
+    try:
+        if importlib.util.find_spec(m) is None:
+            missing.append(m)
+    except Exception:
+        missing.append(m)
+raise SystemExit(1 if missing else 0)
+PYEOF
+  then
+    echo "Nextcloud dependencies: OK"
+    return 0
+  fi
+  echo "Nextcloud dependencies: MISSING"
+  echo "Install with:"
+  print_install_cmd nextcloud
+  return 1
+}
+
+check_nextcloud_config_fields() {
+  python3 - <<PYEOF
+import json
+from pathlib import Path
+p = Path("$CONFIG")
+try:
+    cfg = json.loads(p.read_text())
+except Exception:
+    raise SystemExit(1)
+nc = cfg.get("nextcloud", {})
+needed = ["url", "username", "password"]
+missing = [k for k in needed if not str(nc.get(k, "")).strip()]
+if missing:
+    print("Missing nextcloud config fields: " + ", ".join(missing))
+    raise SystemExit(1)
+raise SystemExit(0)
+PYEOF
+}
+
+run_doctor() {
+  echo "Proactive Claw Doctor"
+  echo "======================"
+
+  local failures=0
+  if ensure_python; then
+    echo "Python: OK"
+  else
+    failures=1
+  fi
+
+  if [ -f "$CONFIG" ]; then
+    echo "Config file: OK ($CONFIG)"
+  else
+    echo "Config file: MISSING ($CONFIG)"
+    echo "  Run: python3 scripts/config_wizard.py --defaults"
+  fi
+
+  local backend
+  backend="$(detect_backend)"
+  echo "Backend: $backend"
+
+  if [ "$backend" = "nextcloud" ]; then
+    if ! check_nextcloud_deps; then
+      failures=1
+    fi
+    if ! check_nextcloud_config_fields; then
+      echo "Nextcloud config: MISSING REQUIRED FIELDS"
+      failures=1
+    else
+      echo "Nextcloud config: OK"
+    fi
+  else
+    if [ ! -f "$CREDS" ]; then
+      echo "Google credentials: MISSING ($CREDS)"
+      echo "Create OAuth Desktop credentials in Google Cloud Console and place credentials.json at:"
+      echo "  $CREDS"
+      failures=1
+    else
+      echo "Google credentials: OK"
+    fi
+    if ! check_google_deps; then
+      failures=1
+    fi
+  fi
+
   echo ""
-  echo "🔧 Nextcloud setup — editing config.json"
-  echo "   Set: nextcloud.url, nextcloud.username, nextcloud.password"
-  echo "   ⚠️  Use an app-specific password (not your account password)."
-  echo "      Generate one at: your-nextcloud.com/settings/personal/security"
-  echo "   Example URL: https://your-nextcloud.com"
-  echo ""
-  python3 - << 'PYEOF'
-import json, sys
+  if [ "$failures" -eq 0 ]; then
+    echo "Doctor result: PASS"
+    return 0
+  fi
+  echo "Doctor result: FAIL"
+  return 1
+}
+
+run_nextcloud_setup() {
+  echo "Setting up Nextcloud backend..."
+  check_nextcloud_deps
+
+  python3 - <<'PYEOF'
+import json
+import sys
 from pathlib import Path
 
 SKILL_DIR = Path.home() / ".openclaw/workspace/skills/proactive-claw"
@@ -140,90 +284,67 @@ nc = config.get("nextcloud", {})
 url = nc.get("url", "").strip()
 username = nc.get("username", "").strip()
 password = nc.get("password", "").strip()
+caldav_path = nc.get("caldav_path", "/remote.php/dav").strip() or "/remote.php/dav"
 
 if not all([url, username, password]):
-    print("❌ Nextcloud credentials not set in config.json.")
-    print("   Set nextcloud.url, nextcloud.username, nextcloud.password")
+    print("ERROR: Nextcloud credentials not set in config.json")
+    print("Set nextcloud.url, nextcloud.username, nextcloud.password")
     sys.exit(1)
 
 try:
     import caldav
     client = caldav.DAVClient(
-        url=f"{url.rstrip('/')}/remote.php/dav",
+        url=f"{url.rstrip('/')}{caldav_path}",
         username=username,
         password=password,
     )
     principal = client.principal()
     calendars = principal.calendars()
-    print(f"✅ Connected to Nextcloud. Found {len(calendars)} calendar(s).")
+    print(f"Connected to Nextcloud. Found {len(calendars)} calendar(s).")
 
-    # Find or create Action Calendar (check both old and new name for migration)
     openclaw_url = None
     for cal in calendars:
-        if cal.name in ("Proactive Claw \u2014 Actions", "OpenClaw"):
+        if cal.name in ("Proactive Claw - Actions", "Proactive Claw — Actions", "OpenClaw"):
             openclaw_url = str(cal.url)
-            print(f"\u2705 Action Calendar exists: {openclaw_url}")
+            print(f"Action Calendar exists: {openclaw_url}")
             break
 
     if not openclaw_url:
-        new_cal = principal.make_calendar(name="Proactive Claw \u2014 Actions")
+        new_cal = principal.make_calendar(name="Proactive Claw - Actions")
         openclaw_url = str(new_cal.url)
-        print(f"\u2705 Action Calendar created: {openclaw_url}")
+        print(f"Action Calendar created: {openclaw_url}")
 
     config["openclaw_cal_id"] = openclaw_url
     config["nextcloud"]["openclaw_calendar_url"] = openclaw_url
 
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=2)
-    print("✅ openclaw_cal_id saved to config.json")
-    print("\n🦞 Nextcloud setup complete!")
+    print("openclaw_cal_id saved to config.json")
 
 except Exception as e:
-    print(f"❌ Nextcloud connection failed: {e}")
+    print(f"Nextcloud connection failed: {e}")
     sys.exit(1)
 PYEOF
+}
 
-else
-  # Google Calendar setup
-  echo ""
+run_google_setup() {
+  echo "Setting up Google backend..."
+
   if [ ! -f "$CREDS" ]; then
-    echo "❌ credentials.json not found at $CREDS"
-    echo ""
+    echo "ERROR: credentials.json not found at $CREDS"
     echo "To create it:"
     echo "  1. Go to https://console.cloud.google.com"
-    echo "  2. Create project 'OpenClaw' → Enable Google Calendar API"
+    echo "  2. Create project 'OpenClaw' and enable Google Calendar API"
     echo "  3. Create OAuth 2.0 credentials (Desktop app)"
-    echo "  4. Download and move: mv ~/Downloads/credentials.json $CREDS"
-    echo ""
-    exit 1
+    echo "  4. Move file to: $CREDS"
+    return 1
   fi
-  echo "✅ credentials.json found"
 
-  echo ""
-  echo "🔎 Checking Google Calendar dependencies..."
-  if ! python3 - << 'PYEOF'
-import importlib.util, sys
-missing = [
-    m for m in ("google.oauth2", "google_auth_oauthlib.flow", "googleapiclient.discovery")
-    if importlib.util.find_spec(m) is None
-]
-if missing:
-    print("missing:" + ",".join(missing))
-    sys.exit(1)
-PYEOF
-  then
-    echo "❌ Missing Python packages for Google backend."
-    echo "   Install one of:"
-    echo "   - uv pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
-    echo "   - pip3 install google-api-python-client google-auth-oauthlib google-auth-httplib2"
-    exit 1
-  fi
-  echo "✅ Google dependencies present"
+  check_google_deps
 
-  echo ""
-  echo "🔐 Authenticating with Google Calendar (browser will open)..."
-  python3 - << 'PYEOF'
-import json, sys
+  python3 - <<'PYEOF'
+import json
+import sys
 from pathlib import Path
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -249,62 +370,117 @@ if not creds or not creds.valid:
     if not creds or not creds.valid:
         flow = InstalledAppFlow.from_client_secrets_file(str(CREDS_FILE), SCOPES)
         creds = flow.run_local_server(port=0)
-    with open(TOKEN_FILE, "w") as f:
-        f.write(creds.to_json())
+    TOKEN_FILE.write_text(creds.to_json())
 
 service = build("calendar", "v3", credentials=creds)
-
-# Check if Action Calendar already exists (check both old and new name for migration)
 calendars = service.calendarList().list().execute().get("items", [])
 openclaw_id = None
 for cal in calendars:
-    if cal.get("summary") in ("Proactive Claw \u2014 Actions", "OpenClaw"):
+    if cal.get("summary") in ("Proactive Claw - Actions", "Proactive Claw — Actions", "OpenClaw"):
         openclaw_id = cal["id"]
-        print(f"\u2705 Action Calendar exists (id: {openclaw_id})")
+        print(f"Action Calendar exists (id: {openclaw_id})")
         break
 
 if not openclaw_id:
-    cal = service.calendars().insert(body={"summary": "Proactive Claw \u2014 Actions"}).execute()
+    cal = service.calendars().insert(body={"summary": "Proactive Claw - Actions"}).execute()
     openclaw_id = cal["id"]
-    print(f"\u2705 Action Calendar created (id: {openclaw_id})")
+    print(f"Action Calendar created (id: {openclaw_id})")
 
-# Save to config
 with open(CONFIG_FILE) as f:
     config = json.load(f)
 config["openclaw_cal_id"] = openclaw_id
 
-# Try to get user email
 try:
     profile = service.calendars().get(calendarId="primary").execute()
     email = profile.get("id", "")
     if email and not config.get("user_email"):
         config["user_email"] = email
-        print(f"✅ user_email set to: {email}")
+        print(f"user_email set to: {email}")
 except Exception:
     pass
 
 with open(CONFIG_FILE, "w") as f:
     json.dump(config, f, indent=2)
-print("✅ OPENCLAW_CAL_ID saved to config.json")
 
-# Verify by listing events
 try:
     service.events().list(calendarId="primary", maxResults=1).execute()
-    print("✅ Calendar API read verified")
+    print("Calendar API read verified")
 except Exception as e:
-    print(f"⚠️  Could not read primary calendar: {e}")
+    print(f"Warning: could not read primary calendar: {e}")
 
-print("\n🦞 Google Calendar setup complete!")
+print("Google setup complete")
 PYEOF
-fi
+}
 
-echo ""
-echo "========================"
-echo "✅ Setup complete."
-echo ""
-echo "Next steps:"
-echo "  1. Test calendar access:  python3 scripts/scan_calendar.py"
-echo "  2. Enable features:       python3 scripts/config_wizard.py"
-echo "  3. Optional integrations: install proactive-claw-integrations add-on"
-echo ""
-echo "All features default OFF — enable only what you need in config.json."
+main() {
+  local mode="setup"
+  local backend_arg=""
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --doctor)
+        mode="doctor"
+        shift
+        ;;
+      --print-install-cmd)
+        if [ "$#" -lt 2 ]; then
+          echo "Missing backend for --print-install-cmd" >&2
+          usage
+          exit 1
+        fi
+        mode="print_install"
+        backend_arg="$2"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown argument: $1" >&2
+        usage
+        exit 1
+        ;;
+    esac
+  done
+
+  if [ "$mode" = "print_install" ]; then
+    if [ -z "$backend_arg" ]; then
+      echo "Missing backend for --print-install-cmd" >&2
+      usage
+      exit 1
+    fi
+    print_install_cmd "$backend_arg"
+    exit 0
+  fi
+
+  if [ "$mode" = "doctor" ]; then
+    run_doctor
+    exit $?
+  fi
+
+  echo "Proactive Claw Setup"
+  echo "===================="
+
+  ensure_python
+  ensure_config_exists
+
+  local backend
+  backend="$(detect_backend)"
+  echo "Calendar backend: $backend"
+
+  if [ "$backend" = "nextcloud" ]; then
+    run_nextcloud_setup
+  else
+    run_google_setup
+  fi
+
+  echo ""
+  echo "Setup complete."
+  echo "Next steps:"
+  echo "  1. Run quickstart: bash scripts/quickstart.sh"
+  echo "  2. Customize config: python3 scripts/config_wizard.py"
+  echo "  3. Run once: python3 scripts/daemon.py"
+}
+
+main "$@"
