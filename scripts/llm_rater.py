@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-llm_rater.py — Rate post-event interaction quality using a configurable LLM.
+llm_rater.py — Rate post-event interaction quality using a local LLM.
 
 Analyses the conversation transcript or outcome notes and scores the quality
 of the proactive check-in: was the prep relevant? Were questions well-timed?
 Did the agenda help? Returns structured feedback.
 
 SECURITY AUDIT SUMMARY — all network calls in this file:
-  1. OpenAI-compatible API (e.g. OpenAI, Groq, Together, LM Studio, Ollama):
-     POST to the configured base_url (default: https://api.openai.com/v1).
-     Sends: LLM_RATER_API_KEY (Bearer token, from env var only) + outcome notes
-     and interaction summary (text you provide). Receives: rating JSON only.
-     Gated by: llm_rater.enabled=true in config.json AND LLM_RATER_API_KEY set.
-     For LOCAL backends (Ollama, LM Studio): no API key needed, no data leaves
-     your machine — set base_url to http://localhost:11434/v1 or http://localhost:1234/v1.
+  1. Local OpenAI-compatible API only (Ollama, LM Studio):
+     POST to local base_url (default: http://localhost:11434/v1).
+     Sends: outcome notes and interaction summary (text you provide).
+     Receives: rating JSON only.
+     Gated by: llm_rater.enabled=true in config.json.
+     Hard block: non-local hosts are rejected (remote cloud backends disabled).
   2. No other network calls. No analytics, no telemetry.
 
 RECOMMENDED LOCAL SETUP (zero data leaves your machine):
@@ -43,12 +42,11 @@ Usage:
     --sentiment positive
 
   python3 llm_rater.py --check-backend    # verify backend is reachable
-  python3 llm_rater.py --list-backends    # show example backend configs
+  python3 llm_rater.py --list-backends    # show local backend configs
 """
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,38 +89,12 @@ EXAMPLE_BACKENDS = {
     "ollama_local": {
         "base_url": "http://localhost:11434/v1",
         "model": "qwen2.5:3b",
-        "api_key_env": "",
         "note": "No API key needed. Run: ollama pull qwen2.5:3b && ollama serve"
     },
     "lmstudio_local": {
         "base_url": "http://localhost:1234/v1",
         "model": "local-model",
-        "api_key_env": "",
         "note": "No API key needed. Start LM Studio and load any model."
-    },
-    "openai": {
-        "base_url": "https://api.openai.com/v1",
-        "model": "gpt-4o-mini",
-        "api_key_env": "LLM_RATER_API_KEY",
-        "note": "Smallest/cheapest OpenAI model. Set LLM_RATER_API_KEY env var."
-    },
-    "groq": {
-        "base_url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.1-8b-instant",
-        "api_key_env": "LLM_RATER_API_KEY",
-        "note": "Free tier available. Fast. Set LLM_RATER_API_KEY to your Groq key."
-    },
-    "together": {
-        "base_url": "https://api.together.xyz/v1",
-        "model": "meta-llama/Llama-3.2-3B-Instruct-Turbo",
-        "api_key_env": "LLM_RATER_API_KEY",
-        "note": "Small fast model on Together AI. Set LLM_RATER_API_KEY."
-    },
-    "anthropic_compatible": {
-        "base_url": "https://api.anthropic.com/v1",
-        "model": "claude-haiku-3-5",
-        "api_key_env": "LLM_RATER_API_KEY",
-        "note": "Anthropic via OpenAI-compatible endpoint. Set LLM_RATER_API_KEY."
     },
 }
 
@@ -141,36 +113,45 @@ def get_rater_config(config: dict) -> dict:
         "enabled": rater.get("enabled", False),
         "base_url": rater.get("base_url", "http://localhost:11434/v1"),
         "model": rater.get("model", "qwen2.5:3b"),
-        "api_key_env": rater.get("api_key_env", ""),
         "timeout": rater.get("timeout", 30),
         "max_tokens": rater.get("max_tokens", 256),
         "temperature": rater.get("temperature", 0.1),
     }
 
 
+def is_local_base_url(base_url: str) -> bool:
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(base_url)
+        host = (parsed.hostname or "").lower()
+    except Exception:
+        return False
+
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
 def call_llm(rater_cfg: dict, prompt: str) -> dict:
     """
-    POST to OpenAI-compatible /chat/completions endpoint.
-    Works with Ollama, LM Studio, OpenAI, Groq, Together, etc.
+    POST to local OpenAI-compatible /chat/completions endpoint.
+    Works with Ollama and LM Studio.
 
     NETWORK CALL: POST {base_url}/chat/completions
-    Sends: API key (from env var, empty for local) + the rating prompt text.
+    Sends: the rating prompt text.
     Receives: JSON with rating scores only.
     """
     import urllib.request
     import urllib.error
 
     base_url = rater_cfg["base_url"].rstrip("/")
+    if not is_local_base_url(base_url):
+        raise ValueError(
+            "remote_llm_backend_blocked: llm_rater only supports localhost backends "
+            "(localhost/127.0.0.1/::1)."
+        )
     url = f"{base_url}/chat/completions"
 
-    api_key = ""
-    key_env = rater_cfg.get("api_key_env", "")
-    if key_env:
-        api_key = os.environ.get(key_env, "")
-
     headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
 
     payload = json.dumps({
         "model": rater_cfg["model"],
@@ -239,6 +220,14 @@ def check_backend(rater_cfg: dict) -> dict:
 
     base_url = rater_cfg["base_url"].rstrip("/")
 
+    if not is_local_base_url(base_url):
+        return {
+            "status": "error",
+            "backend": base_url,
+            "error": "remote_llm_backend_blocked",
+            "fix": "Set llm_rater.base_url to localhost/127.0.0.1/::1",
+        }
+
     # For Ollama, hit /api/tags (lighter than a full completion)
     if "11434" in base_url or "ollama" in base_url.lower():
         check_url = base_url.replace("/v1", "") + "/api/tags"
@@ -260,11 +249,6 @@ def check_backend(rater_cfg: dict) -> dict:
             "max_tokens": 1,
         }).encode()
         headers = {"Content-Type": "application/json"}
-        key_env = rater_cfg.get("api_key_env", "")
-        if key_env:
-            api_key = os.environ.get(key_env, "")
-            if api_key:
-                headers["Authorization"] = f"Bearer {api_key}"
         req = urllib.request.Request(
             f"{base_url}/chat/completions", data=payload, headers=headers
         )
@@ -275,7 +259,7 @@ def check_backend(rater_cfg: dict) -> dict:
         if e.code in (401, 400, 404):
             return {"status": "reachable", "backend": base_url,
                     "model": rater_cfg["model"],
-                    "note": f"Server responded with HTTP {e.code} — check API key or model name"}
+                    "note": f"Server responded with HTTP {e.code} — check model name"}
         return {"status": "error", "backend": base_url, "error": str(e)}
     except Exception as e:
         return {"status": "error", "backend": base_url, "error": str(e),
@@ -284,7 +268,7 @@ def check_backend(rater_cfg: dict) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Rate post-event interaction quality via a local or remote LLM."
+        description="Rate post-event interaction quality via a local LLM."
     )
     parser.add_argument("--event-title", default="")
     parser.add_argument("--event-datetime", default="")

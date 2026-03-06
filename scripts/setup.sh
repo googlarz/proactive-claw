@@ -82,7 +82,6 @@ if [ ! -f "$CONFIG" ]; then
   "feature_policy_conflict_detection": false,
   "feature_cross_skill": false,
   "feature_voice": false,
-  "feature_team_awareness": false,
   "feature_llm_rater": false,
   "feature_telegram_notifications": false,
   "default_user_calendar": "",

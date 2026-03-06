@@ -1,3 +1,9 @@
+## 1.2.36
+- Security/Privacy: `llm_rater.py` is now local-only. Non-local LLM base URLs are hard-blocked (`localhost` / `127.0.0.1` / `::1` only).
+- Security/Privacy: removed cloud LLM backend presets and cloud endpoint references from shipped config/docs.
+- Security/Privacy: `team_awareness.py` is excluded from published bundles via `.clawhubignore` and `.skillignore` (kept as optional source only).
+- Docs/Config: removed `feature_team_awareness` from shipped defaults and updated security tables accordingly.
+
 ## 1.2.35
 - Security: hardened `scripts/optional/setup_clawhub_oauth.sh` to fail closed by default.
 - Security: remote credential bootstrap now requires explicit opt-in (`clawhub_oauth_allow_remote_fetch=true`) and a valid pinned `clawhub_credentials_sha256` match before writing `credentials.json`.

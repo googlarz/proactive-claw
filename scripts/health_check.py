@@ -178,9 +178,6 @@ def check_feature_flag_consistency() -> dict:
     if config.get("feature_energy") and not config.get("feature_memory", True):
         issues.append("feature_energy=true but feature_memory=false — energy predictor needs outcome history.")
 
-    if config.get("feature_team_awareness") and not config.get("feature_calendar", True):
-        issues.append("feature_team_awareness=true but feature_calendar=false.")
-
     if config.get("feature_proactivity_engine") and not config.get("feature_calendar", True):
         issues.append("feature_proactivity_engine=true but feature_calendar=false.")
 

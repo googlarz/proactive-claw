@@ -71,7 +71,6 @@ DEFAULT_CONFIG = {
     "feature_policy_conflict_detection": False,
     "feature_cross_skill": False,
     "feature_voice": False,
-    "feature_team_awareness": False,
     "feature_llm_rater": False,
     "notification_channels": ["openclaw", "system"],
     "telegram": {"bot_token": "", "chat_id": ""},
@@ -81,7 +80,6 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "base_url": "http://localhost:11434/v1",
         "model": "qwen2.5:3b",
-        "api_key_env": "",
         "timeout": 30,
         "max_tokens": 256,
         "temperature": 0.1,
@@ -292,8 +290,7 @@ def main():
         SKILL_DIR.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
-        print(f"
-📝 Config written to {CONFIG_FILE}")
+        print(f"\n📝 Config written to {CONFIG_FILE}")
         print("   Next: run setup.sh to connect your calendar.")
 
 

@@ -57,7 +57,6 @@
   "_external_features_comment": "These contact external services — all MUST be explicitly enabled.",
   "feature_cross_skill": false,
   "feature_voice": false,
-  "feature_team_awareness": false,
   "feature_llm_rater": false,
   "feature_telegram_notifications": false,
 
@@ -84,12 +83,11 @@
     "caldav_path": "/remote.php/dav"
   },
 
-  "_llm_rater_comment": "Defaults to local Ollama — no API key needed, no data leaves machine.",
+  "_llm_rater_comment": "Local-only small LLM rating (localhost backends only). No cloud endpoints.",
   "llm_rater": {
     "enabled": false,
     "base_url": "http://localhost:11434/v1",
     "model": "qwen2.5:3b",
-    "api_key_env": "",
     "timeout": 30,
     "max_tokens": 256,
     "temperature": 0.1
