@@ -1,3 +1,6 @@
+## 1.2.40
+- Release increment after 1.2.39 publish collision; core hardening profile remains unchanged.
+
 ## 1.2.39
 - Security/Scanner hardening: core bundle now excludes `voice_bridge.py` and `llm_rater.py` from published artifacts (`.clawhubignore` / `.skillignore`).
 - Security/Scanner hardening: removed remaining core cross-skill context references from `orchestrator.py` and switched orchestration payloads to local pattern history only.
