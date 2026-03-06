@@ -87,22 +87,13 @@ def orchestrate(event_id: str, event_title: str, event_start: str,
     if open_items:
         summary_lines.append(f"⚠️ {len(open_items)} open action item(s) from last time")
 
-    # ── Step 2: Pull cross-skill context ─────────────────────────────────────
-    def get_context():
-        return run_script("cross_skill.py",
-                          ["--event-title", event_title, "--event-type", event_type])
-
-    context = step("cross_skill_context", get_context)
-    if context and context.get("context_block"):
-        summary_lines.append(f"📎 Context pulled from: {', '.join(context.get('skills_used', []))}")
-
-    # ── Step 3: Get pattern history ───────────────────────────────────────────
+    # ── Step 2: Get pattern history ───────────────────────────────────────────
     def get_patterns():
         return run_script("memory.py", ["--search", event_title])
 
     patterns = step("pattern_history", get_patterns)
 
-    # ── Step 4: Schedule prep block (if policy exists, otherwise check) ───────
+    # ── Step 3: Schedule prep block (if policy exists, otherwise check) ───────
     def schedule_prep():
         if dry_run:
             return {"dry_run": True, "would_create": f"Prep block for {event_title}"}
@@ -118,15 +109,13 @@ def orchestrate(event_id: str, event_title: str, event_start: str,
         pre = prep.get("pre_checkin", {})
         summary_lines.append(f"📅 Prep scheduled: {pre.get('start_friendly', '')}")
 
-    # ── Step 5: Draft pre-meeting email (if email/gmail skill active) ─────────
+    # ── Step 4: Draft pre-meeting email (if email/gmail skill active) ─────────
     email_draft = None
     if skill_exists("gmail") or skill_exists("email"):
         def draft_email():
             agenda_items = []
             if open_items:
                 agenda_items.append(f"Follow-up: {open_items[0]['text']}")
-            if context and context.get("context_block"):
-                agenda_items.append("See attached context")
             agenda_str = "\n".join(f"- {a}" for a in agenda_items) if agenda_items else "- TBD"
             draft = {
                 "subject": f"Prep notes: {event_title}",
@@ -140,16 +129,7 @@ def orchestrate(event_id: str, event_title: str, event_start: str,
         if email_draft and email_draft.get("status") == "draft_ready":
             summary_lines.append("✉️ Pre-meeting email draft ready")
 
-    # ── Step 6: Fetch Notion meeting notes ────────────────────────────────────
-    if skill_exists("notion") and context:
-        notion_pages = []
-        for enrichment in (context.get("enrichments") or []):
-            if enrichment.get("skill") == "notion":
-                notion_pages = enrichment.get("pages", [])
-        if notion_pages:
-            summary_lines.append(f"📝 Notion: {notion_pages[0]['title']}")
-
-    # ── Step 7: Write orchestration summary to pending_nudges ─────────────────
+    # ── Step 5: Write orchestration summary to pending_nudges ─────────────────
     nudge_message = f"🦞 *{event_title}* prep complete:\n" + "\n".join(summary_lines)
     if not dry_run:
         nudges_file = SKILL_DIR / "pending_nudges.json"
@@ -163,12 +143,12 @@ def orchestrate(event_id: str, event_title: str, event_start: str,
             "message": nudge_message,
             "event_id": event_id,
             "type": "orchestration_complete",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "shown": False,
-            "email_draft": email_draft,
-            "open_items": open_items or [],
-            "cross_skill_context": context,
-        })
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "shown": False,
+                "email_draft": email_draft,
+                "open_items": open_items or [],
+                "pattern_history": patterns or {},
+            })
         nudges_file.write_text(json.dumps(nudges, indent=2))
 
     return {

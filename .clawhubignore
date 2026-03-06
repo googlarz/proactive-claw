@@ -27,4 +27,6 @@ scripts/team_awareness.py
 scripts/cross_skill.py
 scripts/install_daemon.sh
 scripts/optional/setup_clawhub_oauth.sh
+scripts/voice_bridge.py
+scripts/llm_rater.py
 proactive-claw-integrations/

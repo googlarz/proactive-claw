@@ -69,18 +69,8 @@ DEFAULT_CONFIG = {
     "feature_behaviour_report": False,
     "feature_config_wizard": False,
     "feature_policy_conflict_detection": False,
-    "feature_voice": False,
-    "feature_llm_rater": False,
     "notification_channels": ["openclaw", "system"],
     "nextcloud": {"url": "", "username": "", "password": "", "openclaw_calendar_url": ""},
-    "llm_rater": {
-        "enabled": False,
-        "base_url": "http://localhost:11434/v1",
-        "model": "qwen2.5:3b",
-        "timeout": 30,
-        "max_tokens": 256,
-        "temperature": 0.1,
-    },
 }
 
 
@@ -163,7 +153,7 @@ def run_wizard() -> dict:
     print("  advisory   — never auto-act, just suggest")
     print("  confirm    — always ask before acting")
     print("  autonomous — trust policies to auto-execute")
-    autonomy = _ask("Max autonomy level", "autonomous", ["advisory", "confirm", "autonomous"])
+    autonomy = _ask("Max autonomy level", "confirm", ["advisory", "confirm", "autonomous"])
     config["max_autonomy_level"] = autonomy
 
     # 6. Notification channels

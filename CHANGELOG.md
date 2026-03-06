@@ -1,3 +1,11 @@
+## 1.2.39
+- Security/Scanner hardening: core bundle now excludes `voice_bridge.py` and `llm_rater.py` from published artifacts (`.clawhubignore` / `.skillignore`).
+- Security/Scanner hardening: removed remaining core cross-skill context references from `orchestrator.py` and switched orchestration payloads to local pattern history only.
+- Security/Scanner hardening: core notification channel learning no longer references `telegram`; core channels are `openclaw` + `system`.
+- Install hardening: `scripts/setup.sh` no longer auto-runs package installers; it now validates required modules and fails closed with explicit manual install instructions.
+- Defaults hardening: interactive config wizard now defaults to `max_autonomy_level=confirm`.
+- Docs: updated `SECURITY.md` and `SKILL.md` to match core-only behavior and setup semantics.
+
 ## 1.2.37
 - Split release model: core bundle is now integration-free by default; third-party/network-heavy helpers moved to the separate `proactive-claw-integrations` add-on.
 - Core bundle exclusions: `cross_skill.py`, `team_awareness.py`, `install_daemon.sh`, and `optional/setup_clawhub_oauth.sh` are no longer published in core.

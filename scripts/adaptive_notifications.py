@@ -4,7 +4,7 @@ adaptive_notifications.py — Self-tuning notification channel + timing intellig
 
 Observes how the user responds to notifications (opened, dismissed, snoozed)
 and adjusts:
-  - Which channels to use per event type (openclaw, system, telegram)
+  - Which channels to use per event type (openclaw, system)
   - Best time-of-day to send notifications
   - Notification frequency per event category
 
@@ -67,7 +67,7 @@ RESPONSE_SCORE = {
     "expired": -0.5,   # user never engaged
 }
 
-ALL_CHANNELS = ["openclaw", "system", "telegram"]
+ALL_CHANNELS = ["openclaw", "system"]
 ALL_HOURS = list(range(6, 23))
 MIN_SAMPLES = 5  # minimum samples before trusting a preference
 
@@ -93,7 +93,7 @@ def record_response(conn: sqlite3.Connection, nudge_id: str, response: str,
                     sent_at: str = "", response_delay_minutes: int = -1) -> dict:
     """
     Record how the user responded to a notification.
-    Called by daemon.py / cross_skill.py when a nudge is opened or dismissed.
+    Called by daemon.py when a nudge is opened or dismissed.
     """
     if response not in RESPONSE_SCORE:
         return {"status": "error", "message": f"Unknown response: {response}. "
@@ -275,7 +275,7 @@ def get_channel_recommendation(conn: sqlite3.Connection, event_type: str,
         }
 
     # Fallback: highest-priority available channel
-    for ch in ["telegram", "system", "openclaw"]:
+    for ch in ["system", "openclaw"]:
         if ch in default_channels:
             return {
                 "channel": ch,

@@ -3,7 +3,7 @@ name: Proactive Claw
 description: >
   🦞 The most powerful proactive engine for OpenClaw. Your personal assistant that learns from you and helps you be more productive.
 
-version: 1.2.37
+version: 1.2.39
 
 metadata:
   openclaw:
@@ -12,7 +12,7 @@ metadata:
       config: [credentials.json, config.json]
     install:
       - kind: shell
-        label: "Run scripts/setup.sh to install dependencies and configure Google OAuth or Nextcloud CalDAV"
+        label: "Run scripts/setup.sh to validate dependencies and configure Google OAuth or Nextcloud CalDAV"
 ---
 
 # 🦞 Proactive Claw

@@ -2,9 +2,10 @@
 # Proactive Claw — One-time setup
 # Supports: Google Calendar API | Nextcloud CalDAV
 #
-# SECURITY NOTE: This script does NOT contact any remote server by default.
-# - All packages are installed from PyPI via uv pip install (pip3 fallback).
+# SECURITY NOTE:
 # - No curl/wget. No eval of remote code. No sudo. No root.
+# - This script does NOT auto-install Python packages.
+# - If required libraries are missing, it prints explicit install commands and exits.
 
 set -e
 
@@ -71,8 +72,6 @@ if [ ! -f "$CONFIG" ]; then
   "feature_behaviour_report": false,
   "feature_config_wizard": false,
   "feature_policy_conflict_detection": false,
-  "feature_voice": false,
-  "feature_llm_rater": false,
   "default_user_calendar": "",
   "timezone": "UTC",
   "user_email": "",
@@ -104,13 +103,22 @@ mkdir -p "$SKILL_DIR/outcomes"
 
 if [ "$BACKEND" = "nextcloud" ]; then
   echo ""
-  echo "📦 Installing Nextcloud dependencies..."
-  if command -v uv &>/dev/null; then
-    uv pip install -q --upgrade caldav icalendar
-  else
-    pip3 install -q --upgrade caldav icalendar
+  echo "🔎 Checking Nextcloud dependencies..."
+  if ! python3 - << 'PYEOF'
+import importlib.util, sys
+missing = [m for m in ("caldav", "icalendar") if importlib.util.find_spec(m) is None]
+if missing:
+    print("missing:" + ",".join(missing))
+    sys.exit(1)
+PYEOF
+  then
+    echo "❌ Missing Python packages for Nextcloud backend."
+    echo "   Install one of:"
+    echo "   - uv pip install caldav icalendar"
+    echo "   - pip3 install caldav icalendar"
+    exit 1
   fi
-  echo "✅ caldav + icalendar installed"
+  echo "✅ Nextcloud dependencies present (caldav, icalendar)"
   echo ""
   echo "🔧 Nextcloud setup — editing config.json"
   echo "   Set: nextcloud.url, nextcloud.username, nextcloud.password"
@@ -192,13 +200,25 @@ else
   echo "✅ credentials.json found"
 
   echo ""
-  echo "📦 Installing Google Calendar dependencies..."
-  if command -v uv &>/dev/null; then
-    uv pip install -q --upgrade google-api-python-client google-auth-oauthlib google-auth-httplib2
-  else
-    pip3 install -q --upgrade google-api-python-client google-auth-oauthlib google-auth-httplib2
+  echo "🔎 Checking Google Calendar dependencies..."
+  if ! python3 - << 'PYEOF'
+import importlib.util, sys
+missing = [
+    m for m in ("google.oauth2", "google_auth_oauthlib.flow", "googleapiclient.discovery")
+    if importlib.util.find_spec(m) is None
+]
+if missing:
+    print("missing:" + ",".join(missing))
+    sys.exit(1)
+PYEOF
+  then
+    echo "❌ Missing Python packages for Google backend."
+    echo "   Install one of:"
+    echo "   - uv pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
+    echo "   - pip3 install google-api-python-client google-auth-oauthlib google-auth-httplib2"
+    exit 1
   fi
-  echo "✅ Dependencies installed"
+  echo "✅ Google dependencies present"
 
   echo ""
   echo "🔐 Authenticating with Google Calendar (browser will open)..."
@@ -285,7 +305,6 @@ echo ""
 echo "Next steps:"
 echo "  1. Test calendar access:  python3 scripts/scan_calendar.py"
 echo "  2. Enable features:       python3 scripts/config_wizard.py"
-echo "  3. Install background daemon (optional):"
-echo "     bash scripts/install_daemon.sh"
+echo "  3. Optional integrations: install proactive-claw-integrations add-on"
 echo ""
 echo "All features default OFF — enable only what you need in config.json."
